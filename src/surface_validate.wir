@@ -1,0 +1,207 @@
+; surface_validate.wir
+;
+; Validates Surface Weave program structure.
+;
+; Surface Weave is a minimal wrapper around WIR with:
+;   (program
+;     (name "program-name")     ; optional
+;     (version "0.1.0")         ; optional
+;     (entry main ...))         ; required, exactly one
+;
+; The body of entry can contain WIR-like forms - we don't validate those here.
+
+(core-module
+  (core-version 1)
+  (decls
+
+    ; External tree functions
+    (extern tree_count (params (tree ptr)) (returns i64))
+    (extern node_kind (params (tree ptr) (index i64)) (returns i32))
+    (extern node_text_start (params (tree ptr) (index i64)) (returns i64))
+    (extern node_text_len (params (tree ptr) (index i64)) (returns i64))
+    (extern node_first_child (params (tree ptr) (index i64)) (returns i64))
+    (extern node_next_sibling (params (tree ptr) (index i64)) (returns i64))
+
+    ; External node kind constants
+    (extern node_list (params) (returns i32))
+    (extern node_ident (params) (returns i32))
+    (extern node_string (params) (returns i32))
+    (extern node_int (params) (returns i32))
+
+    ; =============================================================================
+    ; String comparison
+    ; =============================================================================
+
+    ; Compare text at node with expected string
+    ; Returns 1 if match, 0 otherwise
+    (fn node_text_equals
+      (params (tree ptr) (source ptr) (node_index i64) (expected ptr) (expected_len i64))
+      (returns i32)
+      (do
+        (let text_start i64 (call_i64 node_text_start (param_get tree) (param_get node_index)))
+        (let text_len i64 (call_i64 node_text_len (param_get tree) (param_get node_index)))
+
+        ; Check length
+        (if
+          (condition (ne_i64 (local_get text_len) (param_get expected_len)))
+          (then (do (return (const_i32 0))))
+          (else (do)))
+
+        ; Compare bytes
+        (let i i64 (const_i64 0))
+        (while
+          (condition (lt_i64 (local_get i) (local_get text_len)))
+          (do
+            (let source_byte i32 (load_u8 (ptr_add (param_get source) (add_i64 (local_get text_start) (local_get i)))))
+            (let expected_byte i32 (load_u8 (ptr_add (param_get expected) (local_get i))))
+            (if
+              (condition (ne_i32 (local_get source_byte) (local_get expected_byte)))
+              (then (do (return (const_i32 0))))
+              (else (do)))
+            (set i (add_i64 (local_get i) (const_i64 1)))))
+
+        (return (const_i32 1))))
+
+    ; =============================================================================
+    ; Validation helpers
+    ; =============================================================================
+
+    ; Check if node is an identifier with given text
+    (fn is_ident_with_text
+      (params (tree ptr) (source ptr) (node_index i64) (expected ptr) (expected_len i64))
+      (returns i32)
+      (do
+        (let kind i32 (call_i32 node_kind (param_get tree) (param_get node_index)))
+        (if
+          (condition (ne_i32 (local_get kind) (call_i32 node_ident)))
+          (then (do (return (const_i32 0))))
+          (else (do)))
+
+        (return (call_i32 node_text_equals
+          (param_get tree)
+          (param_get source)
+          (param_get node_index)
+          (param_get expected)
+          (param_get expected_len)))))
+
+    ; Get first child that is an identifier with given text
+    ; Returns node index or -1 if not found
+    (fn find_child_with_ident
+      (params (tree ptr) (source ptr) (parent_index i64) (ident ptr) (ident_len i64))
+      (returns i64)
+      (do
+        (let child i64 (call_i64 node_first_child (param_get tree) (param_get parent_index)))
+
+        (while
+          (condition (ne_i64 (local_get child) (const_i64 -1)))
+          (do
+            ; Check if this child is a list
+            (let kind i32 (call_i32 node_kind (param_get tree) (local_get child)))
+            (if
+              (condition (eq_i32 (local_get kind) (call_i32 node_list)))
+              (then (do
+                ; Check if first child of this list matches ident
+                (let first i64 (call_i64 node_first_child (param_get tree) (local_get child)))
+                (if
+                  (condition (ne_i64 (local_get first) (const_i64 -1)))
+                  (then (do
+                    (if
+                      (condition (ne_i32
+                        (call_i32 is_ident_with_text
+                          (param_get tree)
+                          (param_get source)
+                          (local_get first)
+                          (param_get ident)
+                          (param_get ident_len))
+                        (const_i32 0)))
+                      (then (do (return (local_get child))))
+                      (else (do)))))
+                  (else (do)))))
+              (else (do)))
+
+            (set child (call_i64 node_next_sibling (param_get tree) (local_get child)))))
+
+        (return (const_i64 -1))))
+
+    ; =============================================================================
+    ; Main validation
+    ; =============================================================================
+
+    ; Validate Surface Weave program
+    ; Returns: 0 on success, 1 on error
+    (fn validate
+      (params (tree ptr) (source ptr))
+      (returns i32)
+      (do
+        ; Check we have at least one node
+        (let count i64 (call_i64 tree_count (param_get tree)))
+        (if
+          (condition (eq_i64 (local_get count) (const_i64 0)))
+          (then (do (return (const_i32 1))))
+          (else (do)))
+
+        ; Root should be a list
+        (let root_kind i32 (call_i32 node_kind (param_get tree) (const_i64 0)))
+        (if
+          (condition (ne_i32 (local_get root_kind) (call_i32 node_list)))
+          (then (do (return (const_i32 1))))
+          (else (do)))
+
+        ; First child should be "program"
+        (let first_child i64 (call_i64 node_first_child (param_get tree) (const_i64 0)))
+        (if
+          (condition (eq_i64 (local_get first_child) (const_i64 -1)))
+          (then (do (return (const_i32 1))))
+          (else (do)))
+
+        (if
+          (condition (ne_i32
+            (call_i32 is_ident_with_text
+              (param_get tree)
+              (param_get source)
+              (local_get first_child)
+              (const_string_ptr "program")
+              (const_i64 7))
+            (const_i32 0)))
+          (then (do))
+          (else (do (return (const_i32 1)))))
+
+        ; Look for (entry ...) - must have exactly one
+        (let entry_node i64 (call_i64 find_child_with_ident
+          (param_get tree)
+          (param_get source)
+          (const_i64 0)
+          (const_string_ptr "entry")
+          (const_i64 5)))
+
+        (if
+          (condition (eq_i64 (local_get entry_node) (const_i64 -1)))
+          (then (do (return (const_i32 1))))
+          (else (do)))
+
+        ; Entry must have at least a name
+        (let entry_first i64 (call_i64 node_first_child (param_get tree) (local_get entry_node)))
+        (if
+          (condition (eq_i64 (local_get entry_first) (const_i64 -1)))
+          (then (do (return (const_i32 1))))
+          (else (do)))
+
+        ; Skip "entry" keyword to get to name
+        (let entry_name i64 (call_i64 node_next_sibling (param_get tree) (local_get entry_first)))
+        (if
+          (condition (eq_i64 (local_get entry_name) (const_i64 -1)))
+          (then (do (return (const_i32 1))))
+          (else (do)))
+
+        ; Entry name should be an identifier
+        (let entry_name_kind i32 (call_i32 node_kind (param_get tree) (local_get entry_name)))
+        (if
+          (condition (ne_i32 (local_get entry_name_kind) (call_i32 node_ident)))
+          (then (do (return (const_i32 1))))
+          (else (do)))
+
+        ; All checks passed
+        (return (const_i32 0))))
+
+  )
+)
