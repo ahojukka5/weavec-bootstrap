@@ -1,0 +1,43 @@
+; Parser for the Weave surface language
+; Parses .weave source and generates WIR output
+
+(core-module
+  (core-version 1)
+  (decls
+    ; External functions
+    (extern puts (params (msg ptr)) (returns i32))
+    (extern strlen (params (s ptr)) (returns i64))
+    (extern malloc (params (size i64)) (returns ptr))
+    (extern free (params (p ptr)) (returns void))
+
+    ; Parse and compile a .weave source string to WIR
+    ; source: pointer to source string
+    ; length: length of source string
+    ; For now: expects "fn main() -> i32 { return 42; }"
+    ; Outputs WIR to stdout
+    (fn parse_and_compile
+      (params (source ptr) (length i64))
+      (returns i32)
+      (do
+        ; For Phase 1, just emit hardcoded WIR
+        ; TODO: Actually parse the source in Phase 2
+
+        ; Emit WIR module
+        (call_i32 puts (const_string_ptr "(core-module"))
+        (call_i32 puts (const_string_ptr "  (core-version 1)"))
+        (call_i32 puts (const_string_ptr "  (decls"))
+        (call_i32 puts (const_string_ptr "    (fn main"))
+        (call_i32 puts (const_string_ptr "      (params)"))
+        (call_i32 puts (const_string_ptr "      (returns i32)"))
+        (call_i32 puts (const_string_ptr "      (do"))
+        (call_i32 puts (const_string_ptr "        (return (const_i32 42))"))
+        (call_i32 puts (const_string_ptr "      ) ;; do"))
+        (call_i32 puts (const_string_ptr "    ) ;; fn"))
+        (call_i32 puts (const_string_ptr "  ) ;; decls"))
+        (call_i32 puts (const_string_ptr ") ;; core-module"))
+
+        (return (const_i32 0))
+      )
+    )
+  )
+)

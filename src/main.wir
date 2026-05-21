@@ -4,18 +4,30 @@
 (core-module
   (core-version 1)
   (decls
-    ; External C functions
+    ; External C runtime functions
     (extern puts (params (msg ptr)) (returns i32))
+    (extern malloc (params (size i64)) (returns ptr))
+    (extern free (params (p ptr)) (returns void))
 
-    ; Compile a .weave file to .wir
-    ; For now, this is a minimal implementation that outputs hardcoded WIR
-    ; for our test case: fn main() -> i32 { return 42; }
-    ; Outputs to stdout - use shell redirection for output file
-    (fn compile_file
-      (params)
+    ; Weave runtime functions
+    (extern weave_rt_read_file
+      (params (path ptr) (out_len ptr))
+      (returns ptr))
+
+    ; Parse and compile a .weave source string to WIR
+    ; source: pointer to source string
+    ; length: length of source string
+    ; For now: just emits hardcoded WIR (Phase 1 proof of concept)
+    ; TODO: Actually parse the source in Phase 2
+    (fn parse_and_compile
+      (params (source ptr) (length i64))
       (returns i32)
       (do
-        ; Emit WIR module to stdout
+        ; For Phase 1, emit hardcoded core-module WIR regardless of input
+        ; TODO: Implement actual lexer/parser in Phase 2
+        ; TODO: Consider if we want an intermediate (program ...) format
+
+        ; Emit core-module WIR (compatible with weavec1)
         (call_i32 puts (const_string_ptr "(core-module"))
         (call_i32 puts (const_string_ptr "  (core-version 1)"))
         (call_i32 puts (const_string_ptr "  (decls"))
@@ -29,17 +41,96 @@
         (call_i32 puts (const_string_ptr "  ) ;; decls"))
         (call_i32 puts (const_string_ptr ") ;; core-module"))
 
+
         (return (const_i32 0))
+      )
+    )
+
+    ; Compile a .weave file to .wir
+    ; input_path: path to .weave file
+    ; Reads file, parses it, generates WIR to stdout
+    (fn compile_file
+      (params (input_path ptr))
+      (returns i32)
+      (do
+        ; Allocate space for file length
+        (let file_len_ptr ptr
+          (call_ptr malloc (const_i64 8))
+        )
+
+        ; Initialize file_len to 0
+        (store_i64 (local_get file_len_ptr) (const_i64 0))
+
+        ; Read input file
+        (let file_contents ptr
+          (call_ptr weave_rt_read_file
+            (param_get input_path)
+            (local_get file_len_ptr)
+          )
+        )
+
+        ; Check if file read succeeded
+        (if
+          (condition (eq_ptr (local_get file_contents) (const_null)))
+          (then (do
+            (call_i32 puts (const_string_ptr "error: could not read input file"))
+            (call_void free (local_get file_len_ptr))
+            (return (const_i32 1))
+          ))
+          (else (do))
+        )
+
+        ; Get file length
+        (let file_len i64
+          (load_i64 (local_get file_len_ptr))
+        )
+
+        ; Parse and compile
+        (let result i32
+          (call_i32 parse_and_compile
+            (local_get file_contents)
+            (local_get file_len)
+          )
+        )
+
+        ; Cleanup
+        (call_void free (local_get file_contents))
+        (call_void free (local_get file_len_ptr))
+
+        (return (local_get result))
       ) ;; do
     ) ;; fn
 
     ; Main entry point
+    ; argc should be 2: program_name input.weave
+    ; Output goes to stdout
     (fn weave_main
       (params (argc i32) (argv ptr))
       (returns i32)
       (do
-        ; Just compile - ignore args for now since we output to stdout
-        (return (call_i32 compile_file))
+        ; Check argc
+        (if
+          (condition (ne_i32 (param_get argc) (const_i32 2)))
+          (then (do
+            (call_i32 puts (const_string_ptr "usage: weavefront <input.weave>"))
+            (call_i32 puts (const_string_ptr "  (output goes to stdout - redirect to .wir file)"))
+            (return (const_i32 1))
+          ))
+          (else (do))
+        ) ;; if
+
+        ; Get input path from argv[1]
+        ; argv is array of char*, so argv[1] is at offset 8
+        (let input_path ptr
+          (load_ptr
+            (ptr_add (param_get argv) (const_i64 8))
+          )
+        ) ;; let
+
+        ; Compile the file
+        (return
+          (call_i32 compile_file (local_get input_path))
+        ) ;; return
       ) ;; do
     ) ;; fn
   ) ;; decls

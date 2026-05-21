@@ -37,9 +37,9 @@ int main(int argc, char** argv) {
 }
 EOF
 
-# Link into executable
+# Link into executable (include weave runtime)
 log "link weavefront"
-clang "$BUILD_DIR/wrapper.c" "$BUILD_DIR/main.ll" -o "$WEAVEFRONT"
+clang "$BUILD_DIR/wrapper.c" "$BUILD_DIR/main.ll" "../weavec0/runtime.c" -o "$WEAVEFRONT"
 
 log "weavefront compiler built successfully"
 
@@ -48,7 +48,7 @@ log "running tests"
 
 # Test 01: Compile 01_return_42.weave to WIR
 log "test 01_return_42: compile .weave to .wir"
-"$WEAVEFRONT" > "$BUILD_DIR/01_return_42.wir"
+"$WEAVEFRONT" "$TEST_DIR/01_return_42.weave" > "$BUILD_DIR/01_return_42.wir"
 
 # Compile the generated WIR to LLVM IR
 log "test 01_return_42: compile .wir to .ll"

@@ -1,0 +1,121 @@
+; Lexer for the Weave surface language
+; Tokenizes .weave source code
+
+(core-module
+  (core-version 1)
+  (decls
+    ; Token type constants
+    (fn TOK_EOF (params) (returns i32) (do (return (const_i32 0))))
+    (fn TOK_FN (params) (returns i32) (do (return (const_i32 1))))
+    (fn TOK_RETURN (params) (returns i32) (do (return (const_i32 2))))
+    (fn TOK_IDENT (params) (returns i32) (do (return (const_i32 3))))
+    (fn TOK_NUMBER (params) (returns i32) (do (return (const_i32 4))))
+    (fn TOK_LPAREN (params) (returns i32) (do (return (const_i32 5))))
+    (fn TOK_RPAREN (params) (returns i32) (do (return (const_i32 6))))
+    (fn TOK_LBRACE (params) (returns i32) (do (return (const_i32 7))))
+    (fn TOK_RBRACE (params) (returns i32) (do (return (const_i32 8))))
+    (fn TOK_ARROW (params) (returns i32) (do (return (const_i32 9))))
+    (fn TOK_SEMI (params) (returns i32) (do (return (const_i32 10))))
+    (fn TOK_I32 (params) (returns i32) (do (return (const_i32 11))))
+
+    ; Check if a character is whitespace
+    (fn is_whitespace
+      (params (c i32))
+      (returns bool)
+      (do
+        (if
+          (condition (eq_i32 (param_get c) (const_i32 32)))  ; space
+          (then (do (return (const_bool true))))
+          (else (do))
+        )
+        (if
+          (condition (eq_i32 (param_get c) (const_i32 10)))  ; newline
+          (then (do (return (const_bool true))))
+          (else (do))
+        )
+        (if
+          (condition (eq_i32 (param_get c) (const_i32 13)))  ; carriage return
+          (then (do (return (const_bool true))))
+          (else (do))
+        )
+        (if
+          (condition (eq_i32 (param_get c) (const_i32 9)))   ; tab
+          (then (do (return (const_bool true))))
+          (else (do))
+        )
+        (return (const_bool false))
+      )
+    )
+
+    ; Check if a character is a digit
+    (fn is_digit
+      (params (c i32))
+      (returns bool)
+      (do
+        (if
+          (condition
+            (and_bool
+              (ge_i32 (param_get c) (const_i32 48))   ; '0'
+              (le_i32 (param_get c) (const_i32 57))   ; '9'
+            )
+          )
+          (then (do (return (const_bool true))))
+          (else (do (return (const_bool false))))
+        )
+      )
+    )
+
+    ; Check if a character is alphabetic
+    (fn is_alpha
+      (params (c i32))
+      (returns bool)
+      (do
+        (if
+          (condition
+            (and_bool
+              (ge_i32 (param_get c) (const_i32 97))   ; 'a'
+              (le_i32 (param_get c) (const_i32 122))  ; 'z'
+            )
+          )
+          (then (do (return (const_bool true))))
+          (else (do))
+        )
+        (if
+          (condition
+            (and_bool
+              (ge_i32 (param_get c) (const_i32 65))   ; 'A'
+              (le_i32 (param_get c) (const_i32 90))   ; 'Z'
+            )
+          )
+          (then (do (return (const_bool true))))
+          (else (do))
+        )
+        (if
+          (condition (eq_i32 (param_get c) (const_i32 95)))  ; '_'
+          (then (do (return (const_bool true))))
+          (else (do))
+        )
+        (return (const_bool false))
+      )
+    )
+
+    ; Check if character is alphanumeric
+    (fn is_alnum
+      (params (c i32))
+      (returns bool)
+      (do
+        (if
+          (condition (call_bool is_alpha (param_get c)))
+          (then (do (return (const_bool true))))
+          (else (do))
+        )
+        (if
+          (condition (call_bool is_digit (param_get c)))
+          (then (do (return (const_bool true))))
+          (else (do))
+        )
+        (return (const_bool false))
+      )
+    )
+  )
+)
