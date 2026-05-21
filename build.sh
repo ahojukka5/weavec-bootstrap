@@ -24,9 +24,18 @@ fail() {
 log "building weavefront compiler"
 mkdir -p "$BUILD_DIR"
 
-# Compile the weavefront compiler (written in WIR) using weavec1
+# Compile the weavefront compiler modules (written in WIR) using weavec1
 log "compile src/main.wir"
 "$WEAVEC1" src/main.wir "$BUILD_DIR/main.ll"
+
+log "compile src/parser.wir"
+"$WEAVEC1" src/parser.wir "$BUILD_DIR/parser.ll"
+
+# Add declaration for parse_and_compile to main.ll (weavec1 doesn't emit declares for WIR externs)
+log "add parse_and_compile declaration to main.ll"
+sed -i '' '/^declare ptr @weave_rt_read_file/a\
+declare i32 @parse_and_compile(ptr, i64)
+' "$BUILD_DIR/main.ll"
 
 # Create wrapper C file that calls weave_main
 cat > "$BUILD_DIR/wrapper.c" <<'EOF'
@@ -37,9 +46,15 @@ int main(int argc, char** argv) {
 }
 EOF
 
-# Link into executable (include weave runtime)
-log "link weavefront"
-clang "$BUILD_DIR/wrapper.c" "$BUILD_DIR/main.ll" "../weavec0/runtime.c" -o "$WEAVEFRONT"
+# Compile LLVM IR modules to object files
+log "compile main.ll to object"
+clang -c "$BUILD_DIR/main.ll" -o "$BUILD_DIR/main.o"
+
+log "compile parser.ll to object"
+clang -c "$BUILD_DIR/parser.ll" -o "$BUILD_DIR/parser.o"
+
+log "link weavefront executable"
+clang "$BUILD_DIR/wrapper.c" "$BUILD_DIR/main.o" "$BUILD_DIR/parser.o" "../weavec0/runtime.c" -o "$WEAVEFRONT"
 
 log "weavefront compiler built successfully"
 

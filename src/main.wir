@@ -14,37 +14,10 @@
       (params (path ptr) (out_len ptr))
       (returns ptr))
 
-    ; Parse and compile a .weave source string to WIR
-    ; source: pointer to source string
-    ; length: length of source string
-    ; For now: just emits hardcoded WIR (Phase 1 proof of concept)
-    ; TODO: Actually parse the source in Phase 2
-    (fn parse_and_compile
+    ; Parser function (implemented in parser.wir)
+    (extern parse_and_compile
       (params (source ptr) (length i64))
-      (returns i32)
-      (do
-        ; For Phase 1, emit hardcoded core-module WIR regardless of input
-        ; TODO: Implement actual lexer/parser in Phase 2
-        ; TODO: Consider if we want an intermediate (program ...) format
-
-        ; Emit core-module WIR (compatible with weavec1)
-        (call_i32 puts (const_string_ptr "(core-module"))
-        (call_i32 puts (const_string_ptr "  (core-version 1)"))
-        (call_i32 puts (const_string_ptr "  (decls"))
-        (call_i32 puts (const_string_ptr "    (fn main"))
-        (call_i32 puts (const_string_ptr "      (params)"))
-        (call_i32 puts (const_string_ptr "      (returns i32)"))
-        (call_i32 puts (const_string_ptr "      (do"))
-        (call_i32 puts (const_string_ptr "        (return (const_i32 42))"))
-        (call_i32 puts (const_string_ptr "      ) ;; do"))
-        (call_i32 puts (const_string_ptr "    ) ;; fn"))
-        (call_i32 puts (const_string_ptr "  ) ;; decls"))
-        (call_i32 puts (const_string_ptr ") ;; core-module"))
-
-
-        (return (const_i32 0))
-      )
-    )
+      (returns i32))
 
     ; Compile a .weave file to .wir
     ; input_path: path to .weave file
