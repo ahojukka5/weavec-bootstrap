@@ -19,6 +19,8 @@
 
     ; External I/O functions
     (extern write (params (fd i32) (buf ptr) (count i64)) (returns i64))
+    (extern snprintf (params (buf ptr) (size i64) (format ptr) (value i64)) (returns i32))
+    (extern strlen (params (s ptr)) (returns i64))
 
     ; External tree functions
     (extern tree_count (params (tree ptr)) (returns i64))
@@ -176,6 +178,97 @@
     ; Tree printing
     ; =============================================================================
 
+    ; Print i64 value as decimal string
+    ; Uses subtraction-based algorithm since WIR lacks division/modulo
+    (fn print_i64
+      (params (buffer ptr) (value i64))
+      (returns void)
+      (do
+        ; Handle zero
+        (if
+          (condition (eq_i64 (param_get value) (const_i64 0)))
+          (then (do
+            (call_void buffer_append_byte (param_get buffer) (const_i32 48))  ; '0'
+            (return_void)))
+          (else (do)))
+
+        ; Handle negative
+        (let v i64 (param_get value))
+        (if
+          (condition (lt_i64 (local_get v) (const_i64 0)))
+          (then (do
+            (call_void buffer_append_byte (param_get buffer) (const_i32 45))  ; '-'
+            (set v (sub_i64 (const_i64 0) (local_get v)))))
+          (else (do)))
+
+        ; For small numbers (0-9), use direct table
+        (if
+          (condition (lt_i64 (local_get v) (const_i64 10)))
+          (then (do
+            ; Single digit: just add '0' (48) and print
+            (let digit_char i32 (const_i32 48))  ; Start with '0'
+            (let digit_val i64 (local_get v))
+
+            ; Add digit_val to digit_char by repeated increment
+            (while
+              (condition (gt_i64 (local_get digit_val) (const_i64 0)))
+              (do
+                (set digit_char (add_i32 (local_get digit_char) (const_i32 1)))
+                (set digit_val (sub_i64 (local_get digit_val) (const_i64 1)))))
+
+            (call_void buffer_append_byte (param_get buffer) (local_get digit_char))
+            (return_void)))
+          (else (do)))
+
+        ; For larger numbers, use subtraction-based algorithm
+        (let digits ptr (call_ptr malloc (const_i64 32)))
+        (let digit_count i64 (const_i64 0))
+        (let remaining i64 (local_get v))
+
+        ; Extract digits by repeated subtraction
+        (while
+          (condition (gt_i64 (local_get remaining) (const_i64 0)))
+          (do
+            ; Find last digit and quotient by subtracting 10 from temp
+            (let digit_count_temp i64 (const_i64 0))
+            (let temp i64 (local_get remaining))
+
+            ; Count how many times we can subtract 10
+            (while
+              (condition (ge_i64 (local_get temp) (const_i64 10)))
+              (do
+                (set temp (sub_i64 (local_get temp) (const_i64 10)))
+                (set digit_count_temp (add_i64 (local_get digit_count_temp) (const_i64 1)))))
+
+            ; temp is now the last digit (0-9)
+            ; Convert to ASCII by adding 48 using repeated addition
+            (let ascii_val i32 (const_i32 48))
+            (let temp_copy i64 (local_get temp))
+            (while
+              (condition (gt_i64 (local_get temp_copy) (const_i64 0)))
+              (do
+                (set ascii_val (add_i32 (local_get ascii_val) (const_i32 1)))
+                (set temp_copy (sub_i64 (local_get temp_copy) (const_i64 1)))))
+
+            ; Store ASCII digit
+            (store_i8 (ptr_add (local_get digits) (local_get digit_count)) (local_get ascii_val))
+            (set digit_count (add_i64 (local_get digit_count) (const_i64 1)))
+            (set remaining (local_get digit_count_temp))))
+
+        ; Print digits in reverse
+        (let i i64 (local_get digit_count))
+        (while
+          (condition (gt_i64 (local_get i) (const_i64 0)))
+          (do
+            (set i (sub_i64 (local_get i) (const_i64 1)))
+            (let digit_byte i32 (load_u8 (ptr_add (local_get digits) (local_get i))))
+            (call_void buffer_append_byte (param_get buffer) (local_get digit_byte))))
+
+        ; Free digits buffer
+        (call_void free (local_get digits))
+
+        (return_void)))
+
     ; Print a single node
     (fn print_node
       (params (buffer ptr) (tree ptr) (source ptr) (node_index i64) (depth i64))
@@ -196,7 +289,16 @@
             (return_void)))
           (else (do)))
 
-        ; Handle atom (ident, string, int)
+        ; Handle integer atom - print value field as decimal
+        (if
+          (condition (eq_i32 (local_get kind) (call_i32 node_int)))
+          (then (do
+            (let value i64 (call_i64 node_value (param_get tree) (param_get node_index)))
+            (call_void print_i64 (param_get buffer) (local_get value))
+            (return_void)))
+          (else (do)))
+
+        ; Handle other atoms (ident, string) - read from source
         (let text_start i64 (call_i64 node_text_start (param_get tree) (param_get node_index)))
         (let text_len i64 (call_i64 node_text_len (param_get tree) (param_get node_index)))
 
