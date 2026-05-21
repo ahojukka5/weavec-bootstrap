@@ -1,0 +1,176 @@
+; driver.wir
+;
+; Compilation pipeline orchestration.
+;
+; Pipeline:
+;   1. Read source file
+;   2. Lex to tokens
+;   3. Parse to tree
+;   4. Validate Surface
+;   5. Lower to WIR tree
+;   6. Print WIR to output
+
+(core-module
+  (core-version 1)
+  (decls
+
+    ; External memory functions
+    (extern malloc (params (size i64)) (returns ptr))
+    (extern free (params (p ptr)) (returns void))
+
+    ; External file I/O
+    (extern open (params (path ptr) (flags i32) (mode i32)) (returns i32))
+    (extern close (params (fd i32)) (returns i32))
+    (extern read (params (fd i32) (buf ptr) (count i64)) (returns i64))
+    (extern write (params (fd i32) (buf ptr) (count i64)) (returns i64))
+    (extern lseek (params (fd i32) (offset i64) (whence i32)) (returns i64))
+
+    ; External pipeline functions
+    (extern lex (params (source ptr) (length i64)) (returns ptr))
+    (extern parse (params (tokens ptr)) (returns ptr))
+    (extern validate (params (tree ptr) (source ptr)) (returns i32))
+    (extern lower (params (tree ptr) (source ptr)) (returns ptr))
+    (extern print_tree (params (tree ptr) (source ptr) (fd i32)) (returns i32))
+
+    ; =============================================================================
+    ; File reading
+    ; =============================================================================
+
+    ; Read entire file into buffer
+    ; Returns: pointer to buffer, or null on error
+    ; Stores length at length_out
+    (fn read_file
+      (params (path ptr) (length_out ptr))
+      (returns ptr)
+      (do
+        ; Open file for reading (O_RDONLY = 0)
+        (let fd i32 (call_i32 open (param_get path) (const_i32 0) (const_i32 0)))
+        (if
+          (condition (lt_i32 (local_get fd) (const_i32 0)))
+          (then (do (return (const_null))))
+          (else (do)))
+
+        ; Get file size using lseek
+        (let size i64 (call_i64 lseek (local_get fd) (const_i64 0) (const_i32 2)))  ; SEEK_END = 2
+        (if
+          (condition (lt_i64 (local_get size) (const_i64 0)))
+          (then (do
+            (call_i32 close (local_get fd))
+            (return (const_null))))
+          (else (do)))
+
+        ; Seek back to start
+        (call_i64 lseek (local_get fd) (const_i64 0) (const_i32 0))  ; SEEK_SET = 0
+
+        ; Allocate buffer
+        (let buffer ptr (call_ptr malloc (add_i64 (local_get size) (const_i64 1))))  ; +1 for null terminator
+        (if
+          (condition (eq_ptr (local_get buffer) (const_null)))
+          (then (do
+            (call_i32 close (local_get fd))
+            (return (const_null))))
+          (else (do)))
+
+        ; Read file
+        (let bytes_read i64 (call_i64 read (local_get fd) (local_get buffer) (local_get size)))
+        (call_i32 close (local_get fd))
+
+        (if
+          (condition (ne_i64 (local_get bytes_read) (local_get size)))
+          (then (do
+            (call_void free (local_get buffer))
+            (return (const_null))))
+          (else (do)))
+
+        ; Store length
+        (store_i64 (param_get length_out) (local_get size))
+
+        (return (local_get buffer))))
+
+    ; =============================================================================
+    ; Main compilation function
+    ; =============================================================================
+
+    ; Compile .weave file to .wir file
+    ; Returns: 0 on success, non-zero on error
+    (fn compile_file
+      (params (input_path ptr) (output_path ptr))
+      (returns i32)
+      (do
+        ; 1. Read source file
+        (let source_length_ptr ptr (call_ptr malloc (const_i64 8)))
+        (store_i64 (local_get source_length_ptr) (const_i64 0))
+
+        (let source ptr (call_ptr read_file
+          (param_get input_path)
+          (local_get source_length_ptr)))
+
+        (let source_length i64 (load_i64 (local_get source_length_ptr)))
+        (call_void free (local_get source_length_ptr))
+
+        (if
+          (condition (eq_ptr (local_get source) (const_null)))
+          (then (do (return (const_i32 1))))
+          (else (do)))
+
+        ; 2. Lex to tokens
+        (let tokens ptr (call_ptr lex (local_get source) (local_get source_length)))
+        (if
+          (condition (eq_ptr (local_get tokens) (const_null)))
+          (then (do
+            (call_void free (local_get source))
+            (return (const_i32 2))))
+          (else (do)))
+
+        ; 3. Parse to tree
+        (let surface_tree ptr (call_ptr parse (local_get tokens)))
+        (if
+          (condition (eq_ptr (local_get surface_tree) (const_null)))
+          (then (do
+            (call_void free (local_get source))
+            (return (const_i32 3))))
+          (else (do)))
+
+        ; 4. Validate Surface
+        (let valid i32 (call_i32 validate (local_get surface_tree) (local_get source)))
+        (if
+          (condition (ne_i32 (local_get valid) (const_i32 0)))
+          (then (do
+            (call_void free (local_get source))
+            (return (const_i32 4))))
+          (else (do)))
+
+        ; 5. Lower to WIR tree
+        (let wir_tree ptr (call_ptr lower (local_get surface_tree) (local_get source)))
+        (if
+          (condition (eq_ptr (local_get wir_tree) (const_null)))
+          (then (do
+            (call_void free (local_get source))
+            (return (const_i32 5))))
+          (else (do)))
+
+        ; 6. Open output file (O_WRONLY | O_CREAT | O_TRUNC = 1 | 64 | 512 = 577, mode 0644 = 420)
+        (let out_fd i32 (call_i32 open (param_get output_path) (const_i32 577) (const_i32 420)))
+        (if
+          (condition (lt_i32 (local_get out_fd) (const_i32 0)))
+          (then (do
+            (call_void free (local_get source))
+            (return (const_i32 6))))
+          (else (do)))
+
+        ; 7. Print WIR to output
+        (let print_result i32 (call_i32 print_tree (local_get wir_tree) (local_get source) (local_get out_fd)))
+        (call_i32 close (local_get out_fd))
+
+        ; 8. Cleanup
+        (call_void free (local_get source))
+
+        (if
+          (condition (ne_i32 (local_get print_result) (const_i32 0)))
+          (then (do (return (const_i32 7))))
+          (else (do)))
+
+        (return (const_i32 0))))
+
+  )
+)
