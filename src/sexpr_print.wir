@@ -1,0 +1,297 @@
+; sexpr_print.wir
+;
+; Generic S-expression pretty-printer.
+; Converts tree back to formatted text.
+;
+; Features:
+;   - Proper indentation (2 spaces per level)
+;   - Newlines between top-level forms
+;   - Compact single-line output for small atoms
+
+(core-module
+  (core-version 1)
+  (decls
+
+    ; External memory functions
+    (extern malloc (params (size i64)) (returns ptr))
+    (extern free (params (p ptr)) (returns void))
+    (extern realloc (params (p ptr) (size i64)) (returns ptr))
+
+    ; External I/O functions
+    (extern write (params (fd i32) (buf ptr) (count i64)) (returns i64))
+
+    ; External tree functions
+    (extern tree_count (params (tree ptr)) (returns i64))
+    (extern node_kind (params (tree ptr) (index i64)) (returns i32))
+    (extern node_text_start (params (tree ptr) (index i64)) (returns i64))
+    (extern node_text_len (params (tree ptr) (index i64)) (returns i64))
+    (extern node_first_child (params (tree ptr) (index i64)) (returns i64))
+    (extern node_next_sibling (params (tree ptr) (index i64)) (returns i64))
+    (extern node_value (params (tree ptr) (index i64)) (returns i64))
+
+    ; External node kind constants
+    (extern node_list (params) (returns i32))
+    (extern node_ident (params) (returns i32))
+    (extern node_string (params) (returns i32))
+    (extern node_int (params) (returns i32))
+
+    ; =============================================================================
+    ; Growable buffer
+    ; =============================================================================
+
+    ; Buffer layout (24 bytes):
+    ;   offset 0:  ptr - data
+    ;   offset 8:  i64 - length
+    ;   offset 16: i64 - capacity
+
+    (fn buffer_size
+      (params)
+      (returns i64)
+      (do (return (const_i64 24))))
+
+    (fn buffer_initial_capacity
+      (params)
+      (returns i64)
+      (do (return (const_i64 4096))))
+
+    ; Create new buffer
+    (fn buffer_new
+      (params)
+      (returns ptr)
+      (do
+        (let buffer ptr (call_ptr malloc (call_i64 buffer_size)))
+        (if
+          (condition (eq_ptr (local_get buffer) (const_null)))
+          (then (do (return (const_null))))
+          (else (do)))
+
+        (let capacity i64 (call_i64 buffer_initial_capacity))
+        (let data ptr (call_ptr malloc (local_get capacity)))
+        (if
+          (condition (eq_ptr (local_get data) (const_null)))
+          (then (do
+            (call_void free (local_get buffer))
+            (return (const_null))))
+          (else (do)))
+
+        (store_ptr (local_get buffer) (local_get data))
+        (store_i64 (ptr_add (local_get buffer) (const_i64 8)) (const_i64 0))
+        (store_i64 (ptr_add (local_get buffer) (const_i64 16)) (local_get capacity))
+
+        (return (local_get buffer))))
+
+    ; Free buffer
+    (fn buffer_free
+      (params (buffer ptr))
+      (returns void)
+      (do
+        (if
+          (condition (ne_ptr (param_get buffer) (const_null)))
+          (then (do
+            (let data ptr (load_ptr (param_get buffer)))
+            (if
+              (condition (ne_ptr (local_get data) (const_null)))
+              (then (do (call_void free (local_get data))))
+              (else (do)))
+            (call_void free (param_get buffer))))
+          (else (do)))
+        (return_void)))
+
+    ; Get buffer data
+    (fn buffer_data
+      (params (buffer ptr))
+      (returns ptr)
+      (do (return (load_ptr (param_get buffer)))))
+
+    ; Get buffer length
+    (fn buffer_length
+      (params (buffer ptr))
+      (returns i64)
+      (do (return (load_i64 (ptr_add (param_get buffer) (const_i64 8))))))
+
+    ; Append byte to buffer
+    (fn buffer_append_byte
+      (params (buffer ptr) (byte i32))
+      (returns void)
+      (do
+        (let length i64 (call_i64 buffer_length (param_get buffer)))
+        (let capacity i64 (load_i64 (ptr_add (param_get buffer) (const_i64 16))))
+
+        ; Grow if needed
+        (if
+          (condition (ge_i64 (local_get length) (local_get capacity)))
+          (then (do
+            (let new_capacity i64 (mul_i64 (local_get capacity) (const_i64 2)))
+            (let old_data ptr (call_ptr buffer_data (param_get buffer)))
+            (let new_data ptr (call_ptr realloc (local_get old_data) (local_get new_capacity)))
+            (if
+              (condition (eq_ptr (local_get new_data) (const_null)))
+              (then (do (return_void)))
+              (else (do)))
+            (store_ptr (param_get buffer) (local_get new_data))
+            (store_i64 (ptr_add (param_get buffer) (const_i64 16)) (local_get new_capacity))
+            (set capacity (local_get new_capacity))))
+          (else (do)))
+
+        ; Append byte
+        (let data ptr (call_ptr buffer_data (param_get buffer)))
+        (store_i8 (ptr_add (local_get data) (local_get length)) (param_get byte))
+        (store_i64 (ptr_add (param_get buffer) (const_i64 8)) (add_i64 (local_get length) (const_i64 1)))
+
+        (return_void)))
+
+    ; Append bytes from source
+    (fn buffer_append_bytes
+      (params (buffer ptr) (source ptr) (count i64))
+      (returns void)
+      (do
+        (let i i64 (const_i64 0))
+        (while
+          (condition (lt_i64 (local_get i) (param_get count)))
+          (do
+            (let byte i32 (load_u8 (ptr_add (param_get source) (local_get i))))
+            (call_void buffer_append_byte (param_get buffer) (local_get byte))
+            (set i (add_i64 (local_get i) (const_i64 1)))))
+        (return_void)))
+
+    ; =============================================================================
+    ; Printing helpers
+    ; =============================================================================
+
+    ; Print indentation
+    (fn print_indent
+      (params (buffer ptr) (depth i64))
+      (returns void)
+      (do
+        (let i i64 (const_i64 0))
+        (while
+          (condition (lt_i64 (local_get i) (param_get depth)))
+          (do
+            (call_void buffer_append_byte (param_get buffer) (const_i32 32))  ; space
+            (call_void buffer_append_byte (param_get buffer) (const_i32 32))  ; space
+            (set i (add_i64 (local_get i) (const_i64 1)))))
+        (return_void)))
+
+    ; =============================================================================
+    ; Tree printing
+    ; =============================================================================
+
+    ; Print a single node
+    (fn print_node
+      (params (buffer ptr) (tree ptr) (source ptr) (node_index i64) (depth i64))
+      (returns void)
+      (do
+        (let kind i32 (call_i32 node_kind (param_get tree) (param_get node_index)))
+
+        ; Handle list
+        (if
+          (condition (eq_i32 (local_get kind) (call_i32 node_list)))
+          (then (do
+            (call_void print_list
+              (param_get buffer)
+              (param_get tree)
+              (param_get source)
+              (param_get node_index)
+              (param_get depth))
+            (return_void)))
+          (else (do)))
+
+        ; Handle atom (ident, string, int)
+        (let text_start i64 (call_i64 node_text_start (param_get tree) (param_get node_index)))
+        (let text_len i64 (call_i64 node_text_len (param_get tree) (param_get node_index)))
+
+        (call_void buffer_append_bytes
+          (param_get buffer)
+          (ptr_add (param_get source) (local_get text_start))
+          (local_get text_len))
+
+        (return_void)))
+
+    ; Print a list
+    (fn print_list
+      (params (buffer ptr) (tree ptr) (source ptr) (node_index i64) (depth i64))
+      (returns void)
+      (do
+        (call_void buffer_append_byte (param_get buffer) (const_i32 40))  ; '('
+
+        (let first_child i64 (call_i64 node_first_child (param_get tree) (param_get node_index)))
+
+        ; Empty list
+        (if
+          (condition (eq_i64 (local_get first_child) (const_i64 -1)))
+          (then (do
+            (call_void buffer_append_byte (param_get buffer) (const_i32 41))  ; ')'
+            (return_void)))
+          (else (do)))
+
+        ; Print children
+        (let child i64 (local_get first_child))
+        (let first i32 (const_i32 1))
+
+        (while
+          (condition (ne_i64 (local_get child) (const_i64 -1)))
+          (do
+            ; Add space before non-first children
+            (if
+              (condition (eq_i32 (local_get first) (const_i32 0)))
+              (then (do
+                (call_void buffer_append_byte (param_get buffer) (const_i32 32))))  ; space
+              (else (do)))
+
+            (set first (const_i32 0))
+
+            ; Print child
+            (call_void print_node
+              (param_get buffer)
+              (param_get tree)
+              (param_get source)
+              (local_get child)
+              (add_i64 (param_get depth) (const_i64 1)))
+
+            ; Move to next sibling
+            (set child (call_i64 node_next_sibling (param_get tree) (local_get child)))))
+
+        (call_void buffer_append_byte (param_get buffer) (const_i32 41))  ; ')'
+        (return_void)))
+
+    ; =============================================================================
+    ; Main print entry point
+    ; =============================================================================
+
+    ; Print tree to file descriptor
+    (fn print_tree
+      (params (tree ptr) (source ptr) (fd i32))
+      (returns i32)
+      (do
+        (let buffer ptr (call_ptr buffer_new))
+        (if
+          (condition (eq_ptr (local_get buffer) (const_null)))
+          (then (do (return (const_i32 1))))
+          (else (do)))
+
+        ; Print root node (typically at index 0)
+        (let count i64 (call_i64 tree_count (param_get tree)))
+        (if
+          (condition (gt_i64 (local_get count) (const_i64 0)))
+          (then (do
+            (call_void print_node
+              (local_get buffer)
+              (param_get tree)
+              (param_get source)
+              (const_i64 0)
+              (const_i64 0))
+            (call_void buffer_append_byte (local_get buffer) (const_i32 10))))  ; newline
+          (else (do)))
+
+        ; Write to file
+        (let data ptr (call_ptr buffer_data (local_get buffer)))
+        (let length i64 (call_i64 buffer_length (local_get buffer)))
+        (call_i64 write (param_get fd) (local_get data) (local_get length))
+
+        ; Cleanup
+        (call_void buffer_free (local_get buffer))
+
+        (return (const_i32 0))))
+
+  )
+)
