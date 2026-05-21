@@ -69,6 +69,11 @@ cat > "$BUILD_DIR/surface_lower_decls.txt" <<'EOF'
 declare i32 @node_text_equals(ptr, ptr, i64, ptr, i64)
 EOF
 
+# Special declarations for sexpr_print (uses libc functions)
+cat > "$BUILD_DIR/sexpr_print_decls.txt" <<'EOF'
+declare i32 @snprintf(ptr, i64, ptr, ...)
+EOF
+
 # Helper function to add declarations to LLVM file
 add_declarations() {
   local llfile="$1"
@@ -101,7 +106,7 @@ $WEAVEC1 src/sexpr_lexer.wir "$BUILD_DIR/sexpr_lexer.ll" || fail "Failed to comp
 $WEAVEC1 src/sexpr_parser.wir "$BUILD_DIR/sexpr_parser.ll" || fail "Failed to compile sexpr_parser.wir"
 add_declarations "$BUILD_DIR/sexpr_parser.ll"
 $WEAVEC1 src/sexpr_print.wir "$BUILD_DIR/sexpr_print.ll" || fail "Failed to compile sexpr_print.wir"
-add_declarations "$BUILD_DIR/sexpr_print.ll"
+add_declarations "$BUILD_DIR/sexpr_print.ll" "$BUILD_DIR/sexpr_print_decls.txt"
 $WEAVEC1 src/surface_validate.wir "$BUILD_DIR/surface_validate.ll" || fail "Failed to compile surface_validate.wir"
 add_declarations "$BUILD_DIR/surface_validate.ll"
 $WEAVEC1 src/surface_lower.wir "$BUILD_DIR/surface_lower.ll" || fail "Failed to compile surface_lower.wir"
