@@ -141,7 +141,16 @@
           (else (do)))
 
         ; 5. Lower to WIR tree
-        (let wir_tree ptr (call_ptr lower (local_get surface_tree) (local_get source)))
+        (let unified_source_ptr ptr (call_ptr malloc (const_i64 8)))
+        (store_ptr (local_get unified_source_ptr) (const_null))
+        (let wir_tree ptr (call_ptr lower
+          (local_get surface_tree)
+          (local_get source)
+          (local_get source_length)
+          (local_get unified_source_ptr)))
+        (let unified_source ptr (load_ptr (local_get unified_source_ptr)))
+        (call_void free (local_get unified_source_ptr))
+
         (if
           (condition (eq_ptr (local_get wir_tree) (const_null)))
           (then (do
@@ -155,15 +164,17 @@
           (condition (lt_i32 (local_get out_fd) (const_i32 0)))
           (then (do
             (call_void free (local_get source))
+            (call_void free (local_get unified_source))
             (return (const_i32 6))))
           (else (do)))
 
-        ; 7. Print WIR to output
-        (let print_result i32 (call_i32 print_tree (local_get wir_tree) (local_get source) (local_get out_fd)))
+        ; 7. Print WIR to output using unified source
+        (let print_result i32 (call_i32 print_tree (local_get wir_tree) (local_get unified_source) (local_get out_fd)))
         (call_i32 close (local_get out_fd))
 
         ; 8. Cleanup
         (call_void free (local_get source))
+        (call_void free (local_get unified_source))
 
         (if
           (condition (ne_i32 (local_get print_result) (const_i32 0)))
