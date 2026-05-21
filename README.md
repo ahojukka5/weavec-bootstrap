@@ -38,8 +38,9 @@ WeaveFront is the surface language compiler for Weave, compiling `.weave` files 
 ## Current Status
 
 **Phase 1: Structural Transformation** ✅
+**Phase 2: Dynamic S-Expression Parser** ✅
 
-The compiler transforms Weave's `(program ...)` format to WIR's `(core-module ...)` format.
+The compiler now dynamically parses and transforms Weave source files from `(program ...)` format to WIR's `(core-module ...)` format using streaming S-expression transformation.
 
 ### Supported Syntax
 
@@ -115,20 +116,30 @@ This design allows:
 - Clear lowering path (easy to see generated WIR)
 - No "magic" - everything is explicit
 
+## Implementation Details
+
+### Phase 2: Dynamic S-Expression Parser (Completed)
+
+The parser uses a streaming transformation approach:
+
+- **Character classification**: Functions adapted from weavec1/src/lexer.wir (`is_whitespace`, `is_alpha`, `is_digit`)
+- **Byte-by-byte processing**: Scans input character by character for predictable behavior
+- **Depth tracking**: Maintains parenthesis nesting depth to identify section boundaries
+- **Keyword detection**: Uses `starts_with` helper with `strncmp` to identify special forms
+- **Skip mechanism**: When encountering `(name ...)` or `(version ...)` at depth 1, sets skip_depth flag to ignore content until matching close paren
+- **Transformation rules**:
+  - `(program` at depth 0 → skip (we emit `(core-module` in header)
+  - `(name ...)` at depth 1 → skip entire section
+  - `(version ...)` at depth 1 → skip entire section
+  - `(entry` → emit `(fn` instead, skip "entry" text
+  - All other tokens → pass through unchanged
+  - Closing `)` for `(program)` → skip (we emit it in footer)
+
 ## Next Steps
 
-Current implementation works but uses hardcoded output. Next phases:
-
-### Phase 2: Proper S-Expression Parser
-- Implement S-expression tokenizer
-- Track parenthesis nesting depth
-- Buffer and transform tokens dynamically
-- Handle (name ...) and (version ...) skipping
-- Transform (entry → (fn) replacement
-
 ### Phase 3: Multiple Entry Points
-- Support multiple (entry ...) definitions
-- Generate multiple (fn ...) declarations
+- Support multiple (entry ...) definitions in a single file
+- Generate multiple (fn ...) declarations in output
 - Handle function calls between entries
 
 ### Phase 4: Extended Surface Syntax
