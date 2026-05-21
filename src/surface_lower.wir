@@ -18,6 +18,10 @@
     ; External memory functions
     (extern malloc (params (size i64)) (returns ptr))
     (extern free (params (p ptr)) (returns void))
+    (extern memcpy (params (dest ptr) (src ptr) (n i64)) (returns ptr))
+
+    ; External string length
+    (extern strlen (params (s ptr)) (returns i64))
 
     ; External tree functions
     (extern tree_new (params) (returns ptr))
@@ -50,11 +54,183 @@
       (returns i32))
 
     ; =============================================================================
+    ; WIR Keywords for synthetic source
+    ; =============================================================================
+
+    ; Build unified source containing WIR keywords + original source
+    ; Returns: ptr to unified source
+    ; Writes keyword section length to out_keywords_len
+    (fn build_unified_source
+      (params (original_source ptr) (original_len i64) (out_keywords_len ptr))
+      (returns ptr)
+      (do
+        ; WIR keywords: "core-modulecore-versionfndecls"
+        ; Offsets: core-module=0, core-version=11, fn=23, decls=25
+        (let keywords_len i64 (const_i64 30))
+        (store_i64 (param_get out_keywords_len) (local_get keywords_len))
+
+        ; Allocate unified buffer
+        (let total_len i64 (add_i64 (local_get keywords_len) (param_get original_len)))
+        (let unified ptr (call_ptr malloc (local_get total_len)))
+        (if
+          (condition (eq_ptr (local_get unified) (const_null)))
+          (then (do (return (const_null))))
+          (else (do)))
+
+        ; Copy keywords
+        (let pos i64 (const_i64 0))
+
+        ; "core-module" (11 bytes)
+        (store_i8 (ptr_add (local_get unified) (local_get pos)) (const_i32 99))  ; 'c'
+        (set pos (add_i64 (local_get pos) (const_i64 1)))
+        (store_i8 (ptr_add (local_get unified) (local_get pos)) (const_i32 111)) ; 'o'
+        (set pos (add_i64 (local_get pos) (const_i64 1)))
+        (store_i8 (ptr_add (local_get unified) (local_get pos)) (const_i32 114)) ; 'r'
+        (set pos (add_i64 (local_get pos) (const_i64 1)))
+        (store_i8 (ptr_add (local_get unified) (local_get pos)) (const_i32 101)) ; 'e'
+        (set pos (add_i64 (local_get pos) (const_i64 1)))
+        (store_i8 (ptr_add (local_get unified) (local_get pos)) (const_i32 45))  ; '-'
+        (set pos (add_i64 (local_get pos) (const_i64 1)))
+        (store_i8 (ptr_add (local_get unified) (local_get pos)) (const_i32 109)) ; 'm'
+        (set pos (add_i64 (local_get pos) (const_i64 1)))
+        (store_i8 (ptr_add (local_get unified) (local_get pos)) (const_i32 111)) ; 'o'
+        (set pos (add_i64 (local_get pos) (const_i64 1)))
+        (store_i8 (ptr_add (local_get unified) (local_get pos)) (const_i32 100)) ; 'd'
+        (set pos (add_i64 (local_get pos) (const_i64 1)))
+        (store_i8 (ptr_add (local_get unified) (local_get pos)) (const_i32 117)) ; 'u'
+        (set pos (add_i64 (local_get pos) (const_i64 1)))
+        (store_i8 (ptr_add (local_get unified) (local_get pos)) (const_i32 108)) ; 'l'
+        (set pos (add_i64 (local_get pos) (const_i64 1)))
+        (store_i8 (ptr_add (local_get unified) (local_get pos)) (const_i32 101)) ; 'e'
+        (set pos (add_i64 (local_get pos) (const_i64 1)))
+
+        ; "core-version" (12 bytes)
+        (store_i8 (ptr_add (local_get unified) (local_get pos)) (const_i32 99))  ; 'c'
+        (set pos (add_i64 (local_get pos) (const_i64 1)))
+        (store_i8 (ptr_add (local_get unified) (local_get pos)) (const_i32 111)) ; 'o'
+        (set pos (add_i64 (local_get pos) (const_i64 1)))
+        (store_i8 (ptr_add (local_get unified) (local_get pos)) (const_i32 114)) ; 'r'
+        (set pos (add_i64 (local_get pos) (const_i64 1)))
+        (store_i8 (ptr_add (local_get unified) (local_get pos)) (const_i32 101)) ; 'e'
+        (set pos (add_i64 (local_get pos) (const_i64 1)))
+        (store_i8 (ptr_add (local_get unified) (local_get pos)) (const_i32 45))  ; '-'
+        (set pos (add_i64 (local_get pos) (const_i64 1)))
+        (store_i8 (ptr_add (local_get unified) (local_get pos)) (const_i32 118)) ; 'v'
+        (set pos (add_i64 (local_get pos) (const_i64 1)))
+        (store_i8 (ptr_add (local_get unified) (local_get pos)) (const_i32 101)) ; 'e'
+        (set pos (add_i64 (local_get pos) (const_i64 1)))
+        (store_i8 (ptr_add (local_get unified) (local_get pos)) (const_i32 114)) ; 'r'
+        (set pos (add_i64 (local_get pos) (const_i64 1)))
+        (store_i8 (ptr_add (local_get unified) (local_get pos)) (const_i32 115)) ; 's'
+        (set pos (add_i64 (local_get pos) (const_i64 1)))
+        (store_i8 (ptr_add (local_get unified) (local_get pos)) (const_i32 105)) ; 'i'
+        (set pos (add_i64 (local_get pos) (const_i64 1)))
+        (store_i8 (ptr_add (local_get unified) (local_get pos)) (const_i32 111)) ; 'o'
+        (set pos (add_i64 (local_get pos) (const_i64 1)))
+        (store_i8 (ptr_add (local_get unified) (local_get pos)) (const_i32 110)) ; 'n'
+        (set pos (add_i64 (local_get pos) (const_i64 1)))
+
+        ; "fn" (2 bytes)
+        (store_i8 (ptr_add (local_get unified) (local_get pos)) (const_i32 102)) ; 'f'
+        (set pos (add_i64 (local_get pos) (const_i64 1)))
+        (store_i8 (ptr_add (local_get unified) (local_get pos)) (const_i32 110)) ; 'n'
+        (set pos (add_i64 (local_get pos) (const_i64 1)))
+
+        ; "decls" (5 bytes)
+        (store_i8 (ptr_add (local_get unified) (local_get pos)) (const_i32 100)) ; 'd'
+        (set pos (add_i64 (local_get pos) (const_i64 1)))
+        (store_i8 (ptr_add (local_get unified) (local_get pos)) (const_i32 101)) ; 'e'
+        (set pos (add_i64 (local_get pos) (const_i64 1)))
+        (store_i8 (ptr_add (local_get unified) (local_get pos)) (const_i32 99))  ; 'c'
+        (set pos (add_i64 (local_get pos) (const_i64 1)))
+        (store_i8 (ptr_add (local_get unified) (local_get pos)) (const_i32 108)) ; 'l'
+        (set pos (add_i64 (local_get pos) (const_i64 1)))
+        (store_i8 (ptr_add (local_get unified) (local_get pos)) (const_i32 115)) ; 's'
+        (set pos (add_i64 (local_get pos) (const_i64 1)))
+
+        ; Copy original source
+        (call_ptr memcpy
+          (ptr_add (local_get unified) (local_get keywords_len))
+          (param_get original_source)
+          (param_get original_len))
+
+        (return (local_get unified))))
+
+    ; =============================================================================
     ; Tree copying
     ; =============================================================================
 
     ; Copy a node and its children from source tree to dest tree
+    ; Adjust text_start by source_offset
     ; Returns the new node index in dest tree
+    (fn copy_node_with_offset
+      (params (src_tree ptr) (dest_tree ptr) (node_index i64) (source_offset i64))
+      (returns i64)
+      (do
+        (let kind i32 (call_i32 node_kind (param_get src_tree) (param_get node_index)))
+        (let text_start i64 (call_i64 node_text_start (param_get src_tree) (param_get node_index)))
+        (let text_len i64 (call_i64 node_text_len (param_get src_tree) (param_get node_index)))
+        (let value i64 (call_i64 node_value (param_get src_tree) (param_get node_index)))
+
+        ; Adjust text_start by source_offset
+        (let adjusted_start i64 (add_i64 (local_get text_start) (param_get source_offset)))
+
+        ; Create new node in dest tree
+        (let new_node i64
+          (call_i64 tree_append_node
+            (param_get dest_tree)
+            (local_get kind)
+            (local_get adjusted_start)
+            (local_get text_len)
+            (const_i64 -1)
+            (const_i64 -1)
+            (local_get value)))
+
+        ; If this is a list, copy children
+        (if
+          (condition (eq_i32 (local_get kind) (call_i32 node_list)))
+          (then (do
+            (let first_child i64 (call_i64 node_first_child (param_get src_tree) (param_get node_index)))
+            (if
+              (condition (ne_i64 (local_get first_child) (const_i64 -1)))
+              (then (do
+                ; Copy all children
+                (let child i64 (local_get first_child))
+                (let new_first i64 (const_i64 -1))
+                (let new_prev i64 (const_i64 -1))
+
+                (while
+                  (condition (ne_i64 (local_get child) (const_i64 -1)))
+                  (do
+                    (let new_child i64 (call_i64 copy_node_with_offset
+                      (param_get src_tree)
+                      (param_get dest_tree)
+                      (local_get child)
+                      (param_get source_offset)))
+
+                    (if
+                      (condition (eq_i64 (local_get new_first) (const_i64 -1)))
+                      (then (do (set new_first (local_get new_child))))
+                      (else (do
+                        (call_void node_set_next_sibling
+                          (param_get dest_tree)
+                          (local_get new_prev)
+                          (local_get new_child)))))
+
+                    (set new_prev (local_get new_child))
+                    (set child (call_i64 node_next_sibling (param_get src_tree) (local_get child)))))
+
+                ; Update first_child of new node
+                (call_void node_set_first_child
+                  (param_get dest_tree)
+                  (local_get new_node)
+                  (local_get new_first))))
+              (else (do)))))
+          (else (do)))
+
+        (return (local_get new_node))))
+
+    ; Original copy_node for backward compatibility
     (fn copy_node
       (params (src_tree ptr) (dest_tree ptr) (node_index i64))
       (returns i64)
@@ -124,10 +300,28 @@
 
     ; Lower Surface program to WIR
     ; Returns new tree or null on error
+    ; Writes unified source ptr to out_unified_source
     (fn lower
-      (params (src_tree ptr) (source ptr))
+      (params (src_tree ptr) (source ptr) (source_len i64) (out_unified_source ptr))
       (returns ptr)
       (do
+        ; Build unified source with WIR keywords + original source
+        (let keywords_len_ptr ptr (call_ptr malloc (const_i64 8)))
+        (let unified_source ptr (call_ptr build_unified_source
+          (param_get source)
+          (param_get source_len)
+          (local_get keywords_len_ptr)))
+        (let keywords_len i64 (load_i64 (local_get keywords_len_ptr)))
+        (call_void free (local_get keywords_len_ptr))
+
+        (if
+          (condition (eq_ptr (local_get unified_source) (const_null)))
+          (then (do (return (const_null))))
+          (else (do)))
+
+        ; Store unified source in output parameter
+        (store_ptr (param_get out_unified_source) (local_get unified_source))
+
         ; Create new tree for WIR
         (let dest_tree ptr (call_ptr tree_new))
         (if
@@ -218,7 +412,7 @@
           (call_i64 tree_append_node
             (local_get dest_tree)
             (call_i32 node_ident)
-            (const_i64 0)
+            (const_i64 11)
             (const_i64 12)
             (const_i64 -1)
             (const_i64 -1)
@@ -259,7 +453,7 @@
           (call_i64 tree_append_node
             (local_get dest_tree)
             (call_i32 node_ident)
-            (const_i64 0)
+            (const_i64 25)
             (const_i64 5)
             (const_i64 -1)
             (const_i64 -1)
@@ -281,7 +475,7 @@
           (call_i64 tree_append_node
             (local_get dest_tree)
             (call_i32 node_ident)
-            (const_i64 0)
+            (const_i64 23)
             (const_i64 2)
             (const_i64 -1)
             (const_i64 -1)
@@ -297,10 +491,11 @@
         (while
           (condition (ne_i64 (local_get entry_rest) (const_i64 -1)))
           (do
-            (let copied_child i64 (call_i64 copy_node
+            (let copied_child i64 (call_i64 copy_node_with_offset
               (param_get src_tree)
               (local_get dest_tree)
-              (local_get entry_rest)))
+              (local_get entry_rest)
+              (local_get keywords_len)))
 
             (if
               (condition (eq_i64 (local_get fn_children_first) (const_i64 -1)))
