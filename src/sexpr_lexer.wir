@@ -177,6 +177,70 @@
     )
 
     ; =============================================================================
+    ; Integer parsing helpers
+    ; =============================================================================
+
+    ; Parse integer from source text (start..start+len)
+    ; Returns the parsed i64 value
+    (fn parse_integer
+      (params (source ptr) (start i64) (len i64))
+      (returns i64)
+      (do
+        (let result i64 (const_i64 0))
+        (let index i64 (param_get start))
+        (let end i64 (add_i64 (param_get start) (param_get len)))
+        (let negative i32 (const_i32 0))
+
+        ; Check for minus sign
+        (if
+          (condition
+            (and_bool
+              (lt_i64 (local_get index) (local_get end))
+              (eq_i32
+                (load_u8 (ptr_add (param_get source) (local_get index)))
+                (const_i32 45))))  ; '-'
+          (then (do
+            (set negative (const_i32 1))
+            (set index (add_i64 (local_get index) (const_i64 1)))))
+          (else (do)))
+
+        ; Parse digits
+        (while
+          (condition (lt_i64 (local_get index) (local_get end)))
+          (do
+            (let ch i32 (load_u8 (ptr_add (param_get source) (local_get index))))
+            (if
+              (condition
+                (and_bool
+                  (ge_i32 (local_get ch) (const_i32 48))  ; '0'
+                  (le_i32 (local_get ch) (const_i32 57)))) ; '9'
+              (then (do
+                ; Convert char to digit value (0-9)
+                (let digit_char i32 (sub_i32 (local_get ch) (const_i32 48)))
+                ; Convert to i64 by repeated addition (since digit is 0-9)
+                (let digit_i64 i64 (const_i64 0))
+                (let digit_counter i32 (local_get digit_char))
+                (while
+                  (condition (gt_i32 (local_get digit_counter) (const_i32 0)))
+                  (do
+                    (set digit_i64 (add_i64 (local_get digit_i64) (const_i64 1)))
+                    (set digit_counter (sub_i32 (local_get digit_counter) (const_i32 1)))))
+                ; result = result * 10 + digit
+                (set result (add_i64
+                  (mul_i64 (local_get result) (const_i64 10))
+                  (local_get digit_i64)))))
+              (else (do)))
+            (set index (add_i64 (local_get index) (const_i64 1)))))
+
+        ; Apply sign
+        (if
+          (condition (ne_i32 (local_get negative) (const_i32 0)))
+          (then (do (set result (sub_i64 (const_i64 0) (local_get result)))))
+          (else (do)))
+
+        (return (local_get result))))
+
+    ; =============================================================================
     ; Token-specific lexing
     ; =============================================================================
 
@@ -240,13 +304,18 @@
 
         (let token_len i64 (sub_i64 (local_get index) (param_get start)))
 
-        ; For now, just store 0 as value (proper parsing would use atoi)
+        ; Parse the integer value from source text
+        (let int_value i64 (call_i64 parse_integer
+          (param_get source)
+          (param_get start)
+          (local_get token_len)))
+
         (call_i32 tokens_push
           (param_get tokens)
           (const_i32 5)  ; token_int
           (param_get start)
           (local_get token_len)
-          (const_i64 0))
+          (local_get int_value))
 
         (return (local_get index))))
 
