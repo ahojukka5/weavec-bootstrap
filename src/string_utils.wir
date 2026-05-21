@@ -1,0 +1,89 @@
+; String utility functions for parsing
+
+(core-module
+  (core-version 1)
+  (decls
+    ; External C functions
+    (extern strlen (params (s ptr)) (returns i64))
+    (extern strncmp (params (a ptr) (b ptr) (n i64)) (returns i32))
+    (extern memchr (params (s ptr) (c i32) (n i64)) (returns ptr))
+
+    ; Find the next occurrence of character c in string s
+    ; Returns pointer to the character, or NULL if not found
+    (fn find_char
+      (params (s ptr) (c i32) (max_len i64))
+      (returns ptr)
+      (do
+        (return
+          (call_ptr memchr
+            (param_get s)
+            (param_get c)
+            (param_get max_len)
+          )
+        )
+      )
+    )
+
+    ; Check if string starts with pattern
+    (fn starts_with
+      (params (s ptr) (pattern ptr) (pattern_len i64))
+      (returns bool)
+      (do
+        (let result i32
+          (call_i32 strncmp
+            (param_get s)
+            (param_get pattern)
+            (param_get pattern_len)
+          )
+        )
+        (if
+          (condition (eq_i32 (local_get result) (const_i32 0)))
+          (then (do (return (const_bool true))))
+          (else (do (return (const_bool false))))
+        )
+      )
+    )
+
+    ; Get character at position in string
+    (fn char_at
+      (params (s ptr) (pos i64))
+      (returns i32)
+      (do
+        (return
+          (load_i8
+            (ptr_add (param_get s) (param_get pos))
+          )
+        )
+      )
+    )
+
+    ; Check if character is whitespace
+    (fn is_whitespace
+      (params (c i32))
+      (returns bool)
+      (do
+        (if
+          (condition (eq_i32 (param_get c) (const_i32 32)))  ; space
+          (then (do (return (const_bool true))))
+          (else (do))
+        )
+        (if
+          (condition (eq_i32 (param_get c) (const_i32 10)))  ; newline
+          (then (do (return (const_bool true))))
+          (else (do))
+        )
+        (if
+          (condition (eq_i32 (param_get c) (const_i32 13)))  ; carriage return
+          (then (do (return (const_bool true))))
+          (else (do))
+        )
+        (if
+          (condition (eq_i32 (param_get c) (const_i32 9)))   ; tab
+          (then (do (return (const_bool true))))
+          (else (do))
+        )
+        (return (const_bool false))
+      )
+    )
+  )
+)

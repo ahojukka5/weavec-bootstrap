@@ -37,16 +37,36 @@ WeaveFront is the surface language compiler for Weave, compiling `.weave` files 
 
 ## Current Status
 
-**Phase 1: Proof of Concept** ✅
+**Phase 1: Structural Transformation** ✅
 
-The compiler currently supports a minimal subset just to prove the concept:
+The compiler transforms Weave's `(program ...)` format to WIR's `(core-module ...)` format.
 
 ### Supported Syntax
 
-```rust
-fn main() -> i32 {
-  return 42;
-}
+Weave surface syntax (input):
+```lisp
+(program
+  (name "return-42")
+  (version "0.1")
+  (entry main
+    (params)
+    (returns i32)
+    (do
+      (return
+        (const_i32 42)))))
+```
+
+Transforms to WIR (output):
+```lisp
+(core-module
+  (core-version 1)
+  (decls
+    (fn main
+      (params)
+      (returns i32)
+      (do
+        (return
+          (const_i32 42))))))
 ```
 
 ### Compilation Pipeline
@@ -82,27 +102,45 @@ The build script automatically:
 4. Compiles `.ll` to executable using clang
 5. Runs executable and verifies exit code
 
+## Design Philosophy
+
+**Key Insight**: Weave surface syntax stays close to WIR primitives. This means:
+- Low-level operations like `const_i32`, `add_i32`, `load_ptr` pass through directly
+- Only structural differences: `(program ...)` vs `(core-module ...)`
+- Minimal transformation needed - mostly just rewrapping
+
+This design allows:
+- Gradual addition of higher-level syntax sugar
+- Direct use of WIR primitives when needed
+- Clear lowering path (easy to see generated WIR)
+- No "magic" - everything is explicit
+
 ## Next Steps
 
-The current implementation is intentionally minimal (hardcoded WIR output). Next phases:
+Current implementation works but uses hardcoded output. Next phases:
 
-### Phase 2: Real Lexer/Parser
-- Implement proper tokenization
-- Recursive descent parser for surface syntax
-- AST construction
+### Phase 2: Proper S-Expression Parser
+- Implement S-expression tokenizer
+- Track parenthesis nesting depth
+- Buffer and transform tokens dynamically
+- Handle (name ...) and (version ...) skipping
+- Transform (entry → (fn) replacement
 
-### Phase 3: Extended Surface Syntax
-- Variables and assignments
-- Arithmetic expressions
-- If statements
-- While loops
-- Function calls
+### Phase 3: Multiple Entry Points
+- Support multiple (entry ...) definitions
+- Generate multiple (fn ...) declarations
+- Handle function calls between entries
 
-### Phase 4: Advanced Features
-- Type inference
+### Phase 4: Extended Surface Syntax
+- Add syntactic sugar (if we want it)
+- Variable binding shortcuts
 - Pattern matching
 - Macros
-- Module system
+
+### Phase 5: Module System
+- Import/export between .weave files
+- Namespace management
+- Dependency resolution
 
 ## Philosophy
 
