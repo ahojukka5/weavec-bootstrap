@@ -179,7 +179,6 @@
     ; =============================================================================
 
     ; Print i64 value as decimal string
-    ; Uses subtraction-based algorithm since WIR lacks division/modulo
     (fn print_i64
       (params (buffer ptr) (value i64))
       (returns void)
@@ -201,59 +200,20 @@
             (set v (sub_i64 (const_i64 0) (local_get v)))))
           (else (do)))
 
-        ; For small numbers (0-9), use direct table
-        (if
-          (condition (lt_i64 (local_get v) (const_i64 10)))
-          (then (do
-            ; Single digit: just add '0' (48) and print
-            (let digit_char i32 (const_i32 48))  ; Start with '0'
-            (let digit_val i64 (local_get v))
-
-            ; Add digit_val to digit_char by repeated increment
-            (while
-              (condition (gt_i64 (local_get digit_val) (const_i64 0)))
-              (do
-                (set digit_char (add_i32 (local_get digit_char) (const_i32 1)))
-                (set digit_val (sub_i64 (local_get digit_val) (const_i64 1)))))
-
-            (call_void buffer_append_byte (param_get buffer) (local_get digit_char))
-            (return_void)))
-          (else (do)))
-
-        ; For larger numbers, use subtraction-based algorithm
+        ; Extract digits using division and modulo
         (let digits ptr (call_ptr malloc (const_i64 32)))
         (let digit_count i64 (const_i64 0))
         (let remaining i64 (local_get v))
 
-        ; Extract digits by repeated subtraction
+        ; Extract digits right-to-left
         (while
           (condition (gt_i64 (local_get remaining) (const_i64 0)))
           (do
-            ; Find last digit and quotient by subtracting 10 from temp
-            (let digit_count_temp i64 (const_i64 0))
-            (let temp i64 (local_get remaining))
-
-            ; Count how many times we can subtract 10
-            (while
-              (condition (ge_i64 (local_get temp) (const_i64 10)))
-              (do
-                (set temp (sub_i64 (local_get temp) (const_i64 10)))
-                (set digit_count_temp (add_i64 (local_get digit_count_temp) (const_i64 1)))))
-
-            ; temp is now the last digit (0-9)
-            ; Convert to ASCII by adding 48 using repeated addition
-            (let ascii_val i32 (const_i32 48))
-            (let temp_copy i64 (local_get temp))
-            (while
-              (condition (gt_i64 (local_get temp_copy) (const_i64 0)))
-              (do
-                (set ascii_val (add_i32 (local_get ascii_val) (const_i32 1)))
-                (set temp_copy (sub_i64 (local_get temp_copy) (const_i64 1)))))
-
-            ; Store ASCII digit
+            (let digit i64 (mod_i64 (local_get remaining) (const_i64 10)))
+            (let ascii_val i32 (add_i32 (const_i32 48) (cast_i64_to_i32 (local_get digit))))
             (store_i8 (ptr_add (local_get digits) (local_get digit_count)) (local_get ascii_val))
             (set digit_count (add_i64 (local_get digit_count) (const_i64 1)))
-            (set remaining (local_get digit_count_temp))))
+            (set remaining (div_i64 (local_get remaining) (const_i64 10)))))
 
         ; Print digits in reverse
         (let i i64 (local_get digit_count))
