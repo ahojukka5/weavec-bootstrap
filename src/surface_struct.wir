@@ -1,0 +1,500 @@
+; surface_struct.wir
+;
+; Struct declaration lowering for Surface Weave.
+;
+; Transforms (struct Name (field fname ftype) ...) into getter/setter fn nodes
+; in the WIR dest_tree.
+;
+; Keyword prefix offsets used for synthetic node idents:
+;   23:  fn         36:  params     42:  returns    49:  do
+;   51:  let        63:  param_get  72:  return     97:  call_ptr
+;   114: malloc     120: const_i64  129: const_null 139: eq_ptr
+;   145: ptr_add    152: load_i64   160: load_i32   168: load_ptr
+;   176: store_i64  185: store_i32  194: store_ptr  203: ptr
+;   206: i64        209: i32        212: void       216: const_i32
+;   225: v          235: self       239: return_void
+
+(core-module
+  (core-version 1)
+  (decls
+
+    ; External memory functions
+    (extern malloc (params (size i64)) (returns ptr))
+    (extern free (params (p ptr)) (returns void))
+    (extern memcpy (params (dest ptr) (src ptr) (n i64)) (returns ptr))
+
+    ; External tree functions
+    (extern tree_append_node
+      (params (tree ptr) (kind i32) (text_start i64) (text_len i64)
+              (first_child i64) (next_sibling i64) (value i64))
+      (returns i64))
+    (extern node_kind (params (tree ptr) (index i64)) (returns i32))
+    (extern node_text_start (params (tree ptr) (index i64)) (returns i64))
+    (extern node_text_len (params (tree ptr) (index i64)) (returns i64))
+    (extern node_first_child (params (tree ptr) (index i64)) (returns i64))
+    (extern node_next_sibling (params (tree ptr) (index i64)) (returns i64))
+    (extern node_set_first_child (params (tree ptr) (index i64) (child i64)) (returns void))
+    (extern node_set_next_sibling (params (tree ptr) (index i64) (sibling i64)) (returns void))
+
+    ; External node kind constants
+    (extern node_list (params) (returns i32))
+    (extern node_ident (params) (returns i32))
+    (extern node_int (params) (returns i32))
+
+    ; String comparison (defined in surface_validate.wir)
+    (extern node_text_equals
+      (params (tree ptr) (source ptr) (index i64) (expected ptr) (expected_len i64))
+      (returns i32))
+
+    ; ==========================================================================
+    ; Low-level tree node constructors
+    ; ==========================================================================
+
+    (fn mk_ident
+      (params (tree ptr) (ts i64) (tl i64))
+      (returns i64)
+      (do
+        (return (call_i64 tree_append_node
+          (param_get tree)
+          (call_i32 node_ident)
+          (param_get ts) (param_get tl)
+          (const_i64 -1) (const_i64 -1) (const_i64 0)))))
+
+    (fn mk_list
+      (params (tree ptr))
+      (returns i64)
+      (do
+        (return (call_i64 tree_append_node
+          (param_get tree)
+          (call_i32 node_list)
+          (const_i64 0) (const_i64 1)
+          (const_i64 -1) (const_i64 -1) (const_i64 0)))))
+
+    (fn mk_int
+      (params (tree ptr) (value i64))
+      (returns i64)
+      (do
+        (return (call_i64 tree_append_node
+          (param_get tree)
+          (call_i32 node_int)
+          (const_i64 0) (const_i64 1)
+          (const_i64 -1) (const_i64 -1) (param_get value)))))
+
+    ; Link helpers: set parent's first child and wire sibling chain
+    (fn link1
+      (params (tree ptr) (parent i64) (c1 i64))
+      (returns void)
+      (do
+        (call_void node_set_first_child (param_get tree) (param_get parent) (param_get c1))
+        (return_void)))
+
+    (fn link2
+      (params (tree ptr) (parent i64) (c1 i64) (c2 i64))
+      (returns void)
+      (do
+        (call_void node_set_first_child (param_get tree) (param_get parent) (param_get c1))
+        (call_void node_set_next_sibling (param_get tree) (param_get c1) (param_get c2))
+        (return_void)))
+
+    (fn link3
+      (params (tree ptr) (parent i64) (c1 i64) (c2 i64) (c3 i64))
+      (returns void)
+      (do
+        (call_void node_set_first_child (param_get tree) (param_get parent) (param_get c1))
+        (call_void node_set_next_sibling (param_get tree) (param_get c1) (param_get c2))
+        (call_void node_set_next_sibling (param_get tree) (param_get c2) (param_get c3))
+        (return_void)))
+
+    (fn link4
+      (params (tree ptr) (parent i64) (c1 i64) (c2 i64) (c3 i64) (c4 i64))
+      (returns void)
+      (do
+        (call_void node_set_first_child (param_get tree) (param_get parent) (param_get c1))
+        (call_void node_set_next_sibling (param_get tree) (param_get c1) (param_get c2))
+        (call_void node_set_next_sibling (param_get tree) (param_get c2) (param_get c3))
+        (call_void node_set_next_sibling (param_get tree) (param_get c3) (param_get c4))
+        (return_void)))
+
+    (fn link5
+      (params (tree ptr) (parent i64) (c1 i64) (c2 i64) (c3 i64) (c4 i64) (c5 i64))
+      (returns void)
+      (do
+        (call_void node_set_first_child (param_get tree) (param_get parent) (param_get c1))
+        (call_void node_set_next_sibling (param_get tree) (param_get c1) (param_get c2))
+        (call_void node_set_next_sibling (param_get tree) (param_get c2) (param_get c3))
+        (call_void node_set_next_sibling (param_get tree) (param_get c3) (param_get c4))
+        (call_void node_set_next_sibling (param_get tree) (param_get c4) (param_get c5))
+        (return_void)))
+
+    ; ==========================================================================
+    ; Field type dispatch: map field type ident → keyword prefix offset
+    ; Supports: ptr (offset 203), i64 (offset 206), i32 (offset 209, default)
+    ; ==========================================================================
+
+    ; Returns text_start of the load_* op for a given field type node
+    (fn get_field_load_ts
+      (params (src_tree ptr) (source ptr) (type_node i64))
+      (returns i64)
+      (do
+        (if
+          (condition (ne_i32
+            (call_i32 node_text_equals
+              (param_get src_tree) (param_get source) (param_get type_node)
+              (const_string_ptr "ptr") (const_i64 3))
+            (const_i32 0)))
+          (then (do (return (const_i64 168)))) ; load_ptr
+          (else (do)))
+        (if
+          (condition (ne_i32
+            (call_i32 node_text_equals
+              (param_get src_tree) (param_get source) (param_get type_node)
+              (const_string_ptr "i64") (const_i64 3))
+            (const_i32 0)))
+          (then (do (return (const_i64 152)))) ; load_i64
+          (else (do)))
+        (return (const_i64 160)))) ; load_i32 (default)
+
+    ; Returns text_start of the store_* op for a given field type node
+    (fn get_field_store_ts
+      (params (src_tree ptr) (source ptr) (type_node i64))
+      (returns i64)
+      (do
+        (if
+          (condition (ne_i32
+            (call_i32 node_text_equals
+              (param_get src_tree) (param_get source) (param_get type_node)
+              (const_string_ptr "ptr") (const_i64 3))
+            (const_i32 0)))
+          (then (do (return (const_i64 194)))) ; store_ptr
+          (else (do)))
+        (if
+          (condition (ne_i32
+            (call_i32 node_text_equals
+              (param_get src_tree) (param_get source) (param_get type_node)
+              (const_string_ptr "i64") (const_i64 3))
+            (const_i32 0)))
+          (then (do (return (const_i64 176)))) ; store_i64
+          (else (do)))
+        (return (const_i64 185)))) ; store_i32 (default)
+
+    ; Returns text_start of the type keyword in the prefix for a given field type
+    (fn get_field_type_ts
+      (params (src_tree ptr) (source ptr) (type_node i64))
+      (returns i64)
+      (do
+        (if
+          (condition (ne_i32
+            (call_i32 node_text_equals
+              (param_get src_tree) (param_get source) (param_get type_node)
+              (const_string_ptr "ptr") (const_i64 3))
+            (const_i32 0)))
+          (then (do (return (const_i64 203)))) ; "ptr"
+          (else (do)))
+        (if
+          (condition (ne_i32
+            (call_i32 node_text_equals
+              (param_get src_tree) (param_get source) (param_get type_node)
+              (const_string_ptr "i64") (const_i64 3))
+            (const_i32 0)))
+          (then (do (return (const_i64 206)))) ; "i64"
+          (else (do)))
+        (return (const_i64 209)))) ; "i32" (default)
+
+    ; ==========================================================================
+    ; gen_getter: generate a WIR (fn ...) getter node
+    ;
+    ; Emits: (fn FN_NAME (params (self ptr)) (returns FIELD_TYPE)
+    ;           (do (return (LOAD_OP [(ptr_add (local_get self) (const_i64 OFFSET))]))))
+    ;
+    ; Parameters:
+    ;   tree        - dest WIR tree
+    ;   fn_name_ts  - text_start of getter function name in unified_source
+    ;   fn_name_tl  - text_len of getter function name
+    ;   load_op_ts  - keyword prefix offset of load op (load_ptr=168, load_i64=152, load_i32=160)
+    ;   type_ts     - keyword prefix offset of return type (ptr=203, i64=206, i32=209)
+    ;   byte_offset - byte offset of field within the struct
+    ;
+    ; Returns the (fn ...) list node index.
+    ; ==========================================================================
+    (fn gen_getter
+      (params
+        (tree ptr)
+        (fn_name_ts i64) (fn_name_tl i64)
+        (load_op_ts i64)
+        (type_ts i64)
+        (byte_offset i64))
+      (returns i64)
+      (do
+        ; (param_get self)  -- "self" at keyword offset 235, len 4
+        (let lg_list i64 (call_i64 mk_list (param_get tree)))
+        (let lg_kw   i64 (call_i64 mk_ident (param_get tree) (const_i64 63) (const_i64 9))) ; param_get
+        (let lg_self i64 (call_i64 mk_ident (param_get tree) (const_i64 235) (const_i64 4))) ; self
+        (call_void link2 (param_get tree) lg_list lg_kw lg_self)
+
+        ; load_arg: either (local_get self) directly, or (ptr_add (local_get self) (const_i64 N))
+        (let load_arg i64 (local_get lg_list))
+        (if
+          (condition (gt_i64 (param_get byte_offset) (const_i64 0)))
+          (then (do
+            ; (const_i64 N)
+            (let ci_list i64 (call_i64 mk_list (param_get tree)))
+            (let ci_kw   i64 (call_i64 mk_ident (param_get tree) (const_i64 120) (const_i64 9))) ; const_i64
+            (let ci_n    i64 (call_i64 mk_int (param_get tree) (param_get byte_offset)))
+            (call_void link2 (param_get tree) ci_list ci_kw ci_n)
+            ; (ptr_add (local_get self) (const_i64 N))
+            (let pa_list i64 (call_i64 mk_list (param_get tree)))
+            (let pa_kw   i64 (call_i64 mk_ident (param_get tree) (const_i64 145) (const_i64 7))) ; ptr_add
+            (call_void link3 (param_get tree) pa_list pa_kw (local_get lg_list) ci_list)
+            (set load_arg (local_get pa_list))))
+          (else (do)))
+
+        ; (LOAD_OP load_arg)
+        (let ld_list i64 (call_i64 mk_list (param_get tree)))
+        (let ld_kw   i64 (call_i64 mk_ident (param_get tree) (param_get load_op_ts) (const_i64 8))) ; load_*
+        (call_void link2 (param_get tree) ld_list ld_kw (local_get load_arg))
+
+        ; (return (LOAD_OP ...))
+        (let ret_list i64 (call_i64 mk_list (param_get tree)))
+        (let ret_kw   i64 (call_i64 mk_ident (param_get tree) (const_i64 72) (const_i64 6))) ; return
+        (call_void link2 (param_get tree) ret_list ret_kw ld_list)
+
+        ; (do (return ...))
+        (let do_list i64 (call_i64 mk_list (param_get tree)))
+        (let do_kw   i64 (call_i64 mk_ident (param_get tree) (const_i64 49) (const_i64 2))) ; do
+        (call_void link2 (param_get tree) do_list do_kw ret_list)
+
+        ; (self ptr) -- single param
+        (let pm_list i64 (call_i64 mk_list (param_get tree)))
+        (let pm_nm   i64 (call_i64 mk_ident (param_get tree) (const_i64 235) (const_i64 4))) ; self
+        (let pm_ptr  i64 (call_i64 mk_ident (param_get tree) (const_i64 203) (const_i64 3))) ; ptr
+        (call_void link2 (param_get tree) pm_list pm_nm pm_ptr)
+
+        ; (params (self ptr))
+        (let ps_list i64 (call_i64 mk_list (param_get tree)))
+        (let ps_kw   i64 (call_i64 mk_ident (param_get tree) (const_i64 36) (const_i64 6))) ; params
+        (call_void link2 (param_get tree) ps_list ps_kw pm_list)
+
+        ; (returns TYPE)
+        (let rs_list i64 (call_i64 mk_list (param_get tree)))
+        (let rs_kw   i64 (call_i64 mk_ident (param_get tree) (const_i64 42) (const_i64 7))) ; returns
+        (let rs_type i64 (call_i64 mk_ident (param_get tree) (param_get type_ts) (const_i64 3)))
+        (call_void link2 (param_get tree) rs_list rs_kw rs_type)
+
+        ; (fn NAME params returns do)
+        (let fn_list i64 (call_i64 mk_list (param_get tree)))
+        (let fn_kw   i64 (call_i64 mk_ident (param_get tree) (const_i64 23) (const_i64 2))) ; fn
+        (let fn_nm   i64 (call_i64 mk_ident (param_get tree) (param_get fn_name_ts) (param_get fn_name_tl)))
+        (call_void link5 (param_get tree) fn_list fn_kw fn_nm ps_list rs_list do_list)
+
+        (return fn_list)))
+
+    ; ==========================================================================
+    ; gen_setter: generate a WIR (fn ...) setter node
+    ;
+    ; Emits: (fn FN_NAME (params (self ptr) (v FIELD_TYPE)) (returns void)
+    ;           (do (STORE_OP [(ptr_add (local_get self) (const_i64 OFFSET))] (param_get v))
+    ;               (return_void)))
+    ;
+    ; Parameters:
+    ;   tree         - dest WIR tree
+    ;   fn_name_ts   - text_start of setter function name
+    ;   fn_name_tl   - text_len of setter function name
+    ;   store_op_ts  - keyword prefix offset of store op (store_ptr=194, store_i64=176, store_i32=185)
+    ;   type_ts      - keyword prefix offset of field type (ptr=203, i64=206, i32=209)
+    ;   byte_offset  - byte offset of field within the struct
+    ; ==========================================================================
+    (fn gen_setter
+      (params
+        (tree ptr)
+        (fn_name_ts i64) (fn_name_tl i64)
+        (store_op_ts i64)
+        (type_ts i64)
+        (byte_offset i64))
+      (returns i64)
+      (do
+        ; (param_get self)
+        (let lg_list i64 (call_i64 mk_list (param_get tree)))
+        (let lg_kw   i64 (call_i64 mk_ident (param_get tree) (const_i64 63) (const_i64 9))) ; param_get
+        (let lg_self i64 (call_i64 mk_ident (param_get tree) (const_i64 235) (const_i64 4))) ; self
+        (call_void link2 (param_get tree) lg_list lg_kw lg_self)
+
+        ; store_target: (local_get self) or (ptr_add ...)
+        (let store_target i64 (local_get lg_list))
+        (if
+          (condition (gt_i64 (param_get byte_offset) (const_i64 0)))
+          (then (do
+            (let ci_list i64 (call_i64 mk_list (param_get tree)))
+            (let ci_kw   i64 (call_i64 mk_ident (param_get tree) (const_i64 120) (const_i64 9))) ; const_i64
+            (let ci_n    i64 (call_i64 mk_int (param_get tree) (param_get byte_offset)))
+            (call_void link2 (param_get tree) ci_list ci_kw ci_n)
+            (let pa_list i64 (call_i64 mk_list (param_get tree)))
+            (let pa_kw   i64 (call_i64 mk_ident (param_get tree) (const_i64 145) (const_i64 7))) ; ptr_add
+            (call_void link3 (param_get tree) pa_list pa_kw (local_get lg_list) ci_list)
+            (set store_target (local_get pa_list))))
+          (else (do)))
+
+        ; (param_get v)  -- "v" at keyword offset 225, len 1
+        (let pg_list i64 (call_i64 mk_list (param_get tree)))
+        (let pg_kw   i64 (call_i64 mk_ident (param_get tree) (const_i64 63) (const_i64 9))) ; param_get
+        (let pg_v    i64 (call_i64 mk_ident (param_get tree) (const_i64 225) (const_i64 1))) ; v
+        (call_void link2 (param_get tree) pg_list pg_kw pg_v)
+
+        ; (STORE_OP store_target (param_get v))
+        (let st_list i64 (call_i64 mk_list (param_get tree)))
+        (let st_kw   i64 (call_i64 mk_ident (param_get tree) (param_get store_op_ts) (const_i64 9))) ; store_*
+        (call_void link3 (param_get tree) st_list st_kw (local_get store_target) pg_list)
+
+        ; (return_void)  -- "return_void" at keyword offset 239, len 11
+        (let rv_list i64 (call_i64 mk_list (param_get tree)))
+        (let rv_kw   i64 (call_i64 mk_ident (param_get tree) (const_i64 239) (const_i64 11))) ; return_void
+        (call_void link1 (param_get tree) rv_list rv_kw)
+
+        ; (do (STORE_OP ...) (return_void))
+        (let do_list i64 (call_i64 mk_list (param_get tree)))
+        (let do_kw   i64 (call_i64 mk_ident (param_get tree) (const_i64 49) (const_i64 2))) ; do
+        (call_void link3 (param_get tree) do_list do_kw st_list rv_list)
+
+        ; (self ptr) param
+        (let pm_self_list i64 (call_i64 mk_list (param_get tree)))
+        (let pm_self_nm   i64 (call_i64 mk_ident (param_get tree) (const_i64 235) (const_i64 4))) ; self
+        (let pm_self_ptr  i64 (call_i64 mk_ident (param_get tree) (const_i64 203) (const_i64 3))) ; ptr
+        (call_void link2 (param_get tree) pm_self_list pm_self_nm pm_self_ptr)
+
+        ; (v TYPE) param
+        (let pm_v_list i64 (call_i64 mk_list (param_get tree)))
+        (let pm_v_nm   i64 (call_i64 mk_ident (param_get tree) (const_i64 225) (const_i64 1))) ; v
+        (let pm_v_type i64 (call_i64 mk_ident (param_get tree) (param_get type_ts) (const_i64 3)))
+        (call_void link2 (param_get tree) pm_v_list pm_v_nm pm_v_type)
+        ; chain self → v
+        (call_void node_set_next_sibling (param_get tree) pm_self_list pm_v_list)
+
+        ; (params (self ptr) (v TYPE))
+        (let ps_list i64 (call_i64 mk_list (param_get tree)))
+        (let ps_kw   i64 (call_i64 mk_ident (param_get tree) (const_i64 36) (const_i64 6))) ; params
+        (call_void link2 (param_get tree) ps_list ps_kw pm_self_list)
+
+        ; (returns void)  -- "void" at offset 212, len 4
+        (let rs_list i64 (call_i64 mk_list (param_get tree)))
+        (let rs_kw   i64 (call_i64 mk_ident (param_get tree) (const_i64 42) (const_i64 7))) ; returns
+        (let rs_void i64 (call_i64 mk_ident (param_get tree) (const_i64 212) (const_i64 4))) ; void
+        (call_void link2 (param_get tree) rs_list rs_kw rs_void)
+
+        ; (fn NAME params returns do)
+        (let fn_list i64 (call_i64 mk_list (param_get tree)))
+        (let fn_kw   i64 (call_i64 mk_ident (param_get tree) (const_i64 23) (const_i64 2))) ; fn
+        (let fn_nm   i64 (call_i64 mk_ident (param_get tree) (param_get fn_name_ts) (param_get fn_name_tl)))
+        (call_void link5 (param_get tree) fn_list fn_kw fn_nm ps_list rs_list do_list)
+
+        (return fn_list)))
+
+    ; ==========================================================================
+    ; lower_struct_decls: generate getter/setter fn nodes for all struct decls
+    ;
+    ; Scans src_tree for (struct NAME (field FNAME FTYPE) ...) nodes and emits
+    ; a getter and setter fn for each field.
+    ;
+    ; The struct names buffer (written by build_struct_names in surface_lower.wir)
+    ; starts at unified source offset 250.  lower_struct_decls replicates the
+    ; same traversal order, accumulating names_pos, to derive the text_start of
+    ; each generated function name without needing the buffer in memory.
+    ;
+    ; Parameters:
+    ;   src_tree      - parsed surface Weave AST
+    ;   source        - original source text (for field-type comparisons)
+    ;   dest_tree     - WIR output tree being built
+    ;   last_decl_ptr - ptr to i64: index of the last-appended decl node;
+    ;                   updated on return to reflect newly added nodes
+    ; ==========================================================================
+    (fn lower_struct_decls
+      (params
+        (src_tree ptr)
+        (source ptr)
+        (dest_tree ptr)
+        (last_decl_ptr ptr))
+      (returns void)
+      (do
+        (let last_decl i64 (load_i64 (param_get last_decl_ptr)))
+        (let names_pos i64 (const_i64 0))
+
+        (let prog_first i64 (call_i64 node_first_child (param_get src_tree) (const_i64 0)))
+        (let scan i64 (call_i64 node_next_sibling (param_get src_tree) (local_get prog_first)))
+
+        (while
+          (condition (ne_i64 (local_get scan) (const_i64 -1)))
+          (do
+            (let ck i32 (call_i32 node_kind (param_get src_tree) (local_get scan)))
+            (if
+              (condition (eq_i32 (local_get ck) (call_i32 node_list)))
+              (then (do
+                (let cf i64 (call_i64 node_first_child (param_get src_tree) (local_get scan)))
+                (if
+                  (condition (ne_i64 (local_get cf) (const_i64 -1)))
+                  (then (do
+                    (if
+                      (condition (ne_i32
+                        (call_i32 node_text_equals
+                          (param_get src_tree) (param_get source) (local_get cf)
+                          (const_string_ptr "struct") (const_i64 6))
+                        (const_i32 0)))
+                      (then (do
+                        (let sn    i64 (call_i64 node_next_sibling (param_get src_tree) (local_get cf)))
+                        (let slen  i64 (call_i64 node_text_len     (param_get src_tree) (local_get sn)))
+                        (let fi    i64 (const_i64 0))
+                        (let fnode i64 (call_i64 node_next_sibling (param_get src_tree) (local_get sn)))
+                        (while
+                          (condition (ne_i64 (local_get fnode) (const_i64 -1)))
+                          (do
+                            (if
+                              (condition (eq_i32 (call_i32 node_kind (param_get src_tree) (local_get fnode)) (call_i32 node_list)))
+                              (then (do
+                                (let fkw i64 (call_i64 node_first_child (param_get src_tree) (local_get fnode)))
+                                (if
+                                  (condition (ne_i32
+                                    (call_i32 node_text_equals
+                                      (param_get src_tree) (param_get source) (local_get fkw)
+                                      (const_string_ptr "field") (const_i64 5))
+                                    (const_i32 0)))
+                                  (then (do
+                                    (let fnm    i64 (call_i64 node_next_sibling (param_get src_tree) (local_get fkw)))
+                                    (let fty    i64 (call_i64 node_next_sibling (param_get src_tree) (local_get fnm)))
+                                    (let fnmlen i64 (call_i64 node_text_len     (param_get src_tree) (local_get fnm)))
+                                    (let namelen i64 (add_i64 (local_get slen) (add_i64 (const_i64 5) (local_get fnmlen))))
+                                    ; getter name offset in unified source
+                                    (let gts i64 (add_i64 (const_i64 250) (local_get names_pos)))
+                                    (set names_pos (add_i64 (local_get names_pos) (local_get namelen)))
+                                    ; setter name offset in unified source
+                                    (let sts i64 (add_i64 (const_i64 250) (local_get names_pos)))
+                                    (set names_pos (add_i64 (local_get names_pos) (local_get namelen)))
+                                    ; byte offset of this field = field_index * 8
+                                    (let boff i64 (mul_i64 (local_get fi) (const_i64 8)))
+                                    (let lop i64 (call_i64 get_field_load_ts  (param_get src_tree) (param_get source) (local_get fty)))
+                                    (let sop i64 (call_i64 get_field_store_ts (param_get src_tree) (param_get source) (local_get fty)))
+                                    (let tts i64 (call_i64 get_field_type_ts  (param_get src_tree) (param_get source) (local_get fty)))
+                                    ; emit getter
+                                    (let gfn i64 (call_i64 gen_getter
+                                      (param_get dest_tree)
+                                      (local_get gts) (local_get namelen)
+                                      (local_get lop) (local_get tts) (local_get boff)))
+                                    (call_void node_set_next_sibling (param_get dest_tree) (local_get last_decl) (local_get gfn))
+                                    (set last_decl (local_get gfn))
+                                    ; emit setter
+                                    (let sfn i64 (call_i64 gen_setter
+                                      (param_get dest_tree)
+                                      (local_get sts) (local_get namelen)
+                                      (local_get sop) (local_get tts) (local_get boff)))
+                                    (call_void node_set_next_sibling (param_get dest_tree) (local_get last_decl) (local_get sfn))
+                                    (set last_decl (local_get sfn))
+                                    (set fi (add_i64 (local_get fi) (const_i64 1)))))
+                                  (else (do)))))
+                              (else (do)))
+                            (set fnode (call_i64 node_next_sibling (param_get src_tree) (local_get fnode)))))))
+                      (else (do)))))
+                  (else (do)))))
+              (else (do)))
+            (set scan (call_i64 node_next_sibling (param_get src_tree) (local_get scan)))))
+
+        (store_i64 (param_get last_decl_ptr) (local_get last_decl))
+        (return_void)))
+
+  )
+)

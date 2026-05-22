@@ -31,6 +31,7 @@ $WEAVEC1 src/sexpr_parser.wir "$BUILD_DIR/sexpr_parser.ll" || fail "Failed to co
 $WEAVEC1 src/sexpr_print.wir "$BUILD_DIR/sexpr_print.ll" || fail "Failed to compile sexpr_print.wir"
 $WEAVEC1 src/surface_validate.wir "$BUILD_DIR/surface_validate.ll" || fail "Failed to compile surface_validate.wir"
 $WEAVEC1 src/surface_lower.wir "$BUILD_DIR/surface_lower.ll" || fail "Failed to compile surface_lower.wir"
+$WEAVEC1 src/surface_struct.wir "$BUILD_DIR/surface_struct.ll" || fail "Failed to compile surface_struct.wir"
 $WEAVEC1 src/driver.wir "$BUILD_DIR/driver.ll" || fail "Failed to compile driver.wir"
 $WEAVEC1 src/main.wir "$BUILD_DIR/main.ll" || fail "Failed to compile main.wir"
 
@@ -44,6 +45,7 @@ llvm-link \
   "$BUILD_DIR/sexpr_print.ll" \
   "$BUILD_DIR/surface_validate.ll" \
   "$BUILD_DIR/surface_lower.ll" \
+  "$BUILD_DIR/surface_struct.ll" \
   "$BUILD_DIR/driver.ll" \
   "$BUILD_DIR/main.ll" \
   -o "$BUILD_DIR/weavefront.bc" || fail "Failed to link LLVM modules"

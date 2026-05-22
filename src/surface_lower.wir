@@ -54,20 +54,43 @@
       (params (tree ptr) (source ptr) (node_index i64) (expected ptr) (expected_len i64))
       (returns i32))
 
+    ; External struct lowering (defined in surface_struct.wir)
+    (extern lower_struct_decls
+      (params (src_tree ptr) (source ptr) (dest_tree ptr) (last_decl_ptr ptr))
+      (returns void))
+
     ; =============================================================================
     ; WIR Keywords for synthetic source
     ; =============================================================================
 
-    ; Build unified source containing WIR keywords + original source
-    ; Returns: ptr to unified source
-    ; Writes keyword section length to out_keywords_len
+    ; Build unified source: [250-byte keyword prefix][struct names][original source]
+    ;
+    ; Keyword prefix layout (offsets used by gen_getter/gen_setter in surface_struct.wir):
+    ;   0:   core-module   11:  core-version  23:  fn      25:  decls
+    ;   30:  extern        36:  params        42:  returns 49:  do
+    ;   51:  let           54:  local_get     63:  param_get 72: return
+    ;   78:  call_i32      86:  call_i64      94:  set     97:  call_ptr
+    ;   105: call_void     114: malloc        120: const_i64 129: const_null
+    ;   139: eq_ptr        145: ptr_add       152: load_i64  160: load_i32
+    ;   168: load_ptr      176: store_i64     185: store_i32 194: store_ptr
+    ;   203: ptr           206: i64           209: i32     212: void
+    ;   216: const_i32     225: v             226: call_void 235: self
+    ;   239: return_void
+    ;
+    ; Parameters:
+    ;   original_source  - original .weave source bytes
+    ;   original_len     - length of original source
+    ;   names_buf        - buffer of generated struct accessor names (may be null)
+    ;   names_len        - length of names_buf (0 when no structs)
+    ;   out_keywords_len - written with (250 + names_len), the offset of original source
+    ;
+    ; Returns ptr to unified source, or null on allocation failure.
     (fn build_unified_source
-      (params (original_source ptr) (original_len i64) (out_keywords_len ptr))
+      (params (original_source ptr) (original_len i64) (names_buf ptr) (names_len i64) (out_keywords_len ptr))
       (returns ptr)
       (do
-        ; WIR keywords: "core-modulecore-versionfndecls"
-        ; Offsets: core-module=0, core-version=11, fn=23, decls=25
-        (let keywords_len i64 (const_i64 30))
+        ; keywords_len = 250 (base prefix) + names_len
+        (let keywords_len i64 (add_i64 (const_i64 250) (param_get names_len)))
         (store_i64 (param_get out_keywords_len) (local_get keywords_len))
 
         ; Allocate unified buffer
@@ -78,78 +101,56 @@
           (then (do (return (const_null))))
           (else (do)))
 
-        ; Copy keywords
-        (let pos i64 (const_i64 0))
+        ; Write 250-byte keyword prefix using memcpy
+        (call_ptr memcpy (ptr_add (local_get unified) (const_i64 0))   (const_string_ptr "core-module")  (const_i64 11))
+        (call_ptr memcpy (ptr_add (local_get unified) (const_i64 11))  (const_string_ptr "core-version") (const_i64 12))
+        (call_ptr memcpy (ptr_add (local_get unified) (const_i64 23))  (const_string_ptr "fn")           (const_i64 2))
+        (call_ptr memcpy (ptr_add (local_get unified) (const_i64 25))  (const_string_ptr "decls")        (const_i64 5))
+        (call_ptr memcpy (ptr_add (local_get unified) (const_i64 30))  (const_string_ptr "extern")       (const_i64 6))
+        (call_ptr memcpy (ptr_add (local_get unified) (const_i64 36))  (const_string_ptr "params")       (const_i64 6))
+        (call_ptr memcpy (ptr_add (local_get unified) (const_i64 42))  (const_string_ptr "returns")      (const_i64 7))
+        (call_ptr memcpy (ptr_add (local_get unified) (const_i64 49))  (const_string_ptr "do")           (const_i64 2))
+        (call_ptr memcpy (ptr_add (local_get unified) (const_i64 51))  (const_string_ptr "let")          (const_i64 3))
+        (call_ptr memcpy (ptr_add (local_get unified) (const_i64 54))  (const_string_ptr "local_get")    (const_i64 9))
+        (call_ptr memcpy (ptr_add (local_get unified) (const_i64 63))  (const_string_ptr "param_get")    (const_i64 9))
+        (call_ptr memcpy (ptr_add (local_get unified) (const_i64 72))  (const_string_ptr "return")       (const_i64 6))
+        (call_ptr memcpy (ptr_add (local_get unified) (const_i64 78))  (const_string_ptr "call_i32")     (const_i64 8))
+        (call_ptr memcpy (ptr_add (local_get unified) (const_i64 86))  (const_string_ptr "call_i64")     (const_i64 8))
+        (call_ptr memcpy (ptr_add (local_get unified) (const_i64 94))  (const_string_ptr "set")          (const_i64 3))
+        (call_ptr memcpy (ptr_add (local_get unified) (const_i64 97))  (const_string_ptr "call_ptr")     (const_i64 8))
+        (call_ptr memcpy (ptr_add (local_get unified) (const_i64 105)) (const_string_ptr "call_void")    (const_i64 9))
+        (call_ptr memcpy (ptr_add (local_get unified) (const_i64 114)) (const_string_ptr "malloc")       (const_i64 6))
+        (call_ptr memcpy (ptr_add (local_get unified) (const_i64 120)) (const_string_ptr "const_i64")    (const_i64 9))
+        (call_ptr memcpy (ptr_add (local_get unified) (const_i64 129)) (const_string_ptr "const_null")   (const_i64 10))
+        (call_ptr memcpy (ptr_add (local_get unified) (const_i64 139)) (const_string_ptr "eq_ptr")       (const_i64 6))
+        (call_ptr memcpy (ptr_add (local_get unified) (const_i64 145)) (const_string_ptr "ptr_add")      (const_i64 7))
+        (call_ptr memcpy (ptr_add (local_get unified) (const_i64 152)) (const_string_ptr "load_i64")     (const_i64 8))
+        (call_ptr memcpy (ptr_add (local_get unified) (const_i64 160)) (const_string_ptr "load_i32")     (const_i64 8))
+        (call_ptr memcpy (ptr_add (local_get unified) (const_i64 168)) (const_string_ptr "load_ptr")     (const_i64 8))
+        (call_ptr memcpy (ptr_add (local_get unified) (const_i64 176)) (const_string_ptr "store_i64")    (const_i64 9))
+        (call_ptr memcpy (ptr_add (local_get unified) (const_i64 185)) (const_string_ptr "store_i32")    (const_i64 9))
+        (call_ptr memcpy (ptr_add (local_get unified) (const_i64 194)) (const_string_ptr "store_ptr")    (const_i64 9))
+        (call_ptr memcpy (ptr_add (local_get unified) (const_i64 203)) (const_string_ptr "ptr")          (const_i64 3))
+        (call_ptr memcpy (ptr_add (local_get unified) (const_i64 206)) (const_string_ptr "i64")          (const_i64 3))
+        (call_ptr memcpy (ptr_add (local_get unified) (const_i64 209)) (const_string_ptr "i32")          (const_i64 3))
+        (call_ptr memcpy (ptr_add (local_get unified) (const_i64 212)) (const_string_ptr "void")         (const_i64 4))
+        (call_ptr memcpy (ptr_add (local_get unified) (const_i64 216)) (const_string_ptr "const_i32")    (const_i64 9))
+        (call_ptr memcpy (ptr_add (local_get unified) (const_i64 225)) (const_string_ptr "v")            (const_i64 1))
+        (call_ptr memcpy (ptr_add (local_get unified) (const_i64 226)) (const_string_ptr "call_void")    (const_i64 9))
+        (call_ptr memcpy (ptr_add (local_get unified) (const_i64 235)) (const_string_ptr "self")         (const_i64 4))
+        (call_ptr memcpy (ptr_add (local_get unified) (const_i64 239)) (const_string_ptr "return_void")  (const_i64 11))
 
-        ; "core-module" (11 bytes)
-        (store_i8 (ptr_add (local_get unified) (local_get pos)) (const_i32 99))  ; 'c'
-        (set pos (add_i64 (local_get pos) (const_i64 1)))
-        (store_i8 (ptr_add (local_get unified) (local_get pos)) (const_i32 111)) ; 'o'
-        (set pos (add_i64 (local_get pos) (const_i64 1)))
-        (store_i8 (ptr_add (local_get unified) (local_get pos)) (const_i32 114)) ; 'r'
-        (set pos (add_i64 (local_get pos) (const_i64 1)))
-        (store_i8 (ptr_add (local_get unified) (local_get pos)) (const_i32 101)) ; 'e'
-        (set pos (add_i64 (local_get pos) (const_i64 1)))
-        (store_i8 (ptr_add (local_get unified) (local_get pos)) (const_i32 45))  ; '-'
-        (set pos (add_i64 (local_get pos) (const_i64 1)))
-        (store_i8 (ptr_add (local_get unified) (local_get pos)) (const_i32 109)) ; 'm'
-        (set pos (add_i64 (local_get pos) (const_i64 1)))
-        (store_i8 (ptr_add (local_get unified) (local_get pos)) (const_i32 111)) ; 'o'
-        (set pos (add_i64 (local_get pos) (const_i64 1)))
-        (store_i8 (ptr_add (local_get unified) (local_get pos)) (const_i32 100)) ; 'd'
-        (set pos (add_i64 (local_get pos) (const_i64 1)))
-        (store_i8 (ptr_add (local_get unified) (local_get pos)) (const_i32 117)) ; 'u'
-        (set pos (add_i64 (local_get pos) (const_i64 1)))
-        (store_i8 (ptr_add (local_get unified) (local_get pos)) (const_i32 108)) ; 'l'
-        (set pos (add_i64 (local_get pos) (const_i64 1)))
-        (store_i8 (ptr_add (local_get unified) (local_get pos)) (const_i32 101)) ; 'e'
-        (set pos (add_i64 (local_get pos) (const_i64 1)))
+        ; Copy struct names after keyword prefix (at offset 250)
+        (if
+          (condition (gt_i64 (param_get names_len) (const_i64 0)))
+          (then (do
+            (call_ptr memcpy
+              (ptr_add (local_get unified) (const_i64 250))
+              (param_get names_buf)
+              (param_get names_len))))
+          (else (do)))
 
-        ; "core-version" (12 bytes)
-        (store_i8 (ptr_add (local_get unified) (local_get pos)) (const_i32 99))  ; 'c'
-        (set pos (add_i64 (local_get pos) (const_i64 1)))
-        (store_i8 (ptr_add (local_get unified) (local_get pos)) (const_i32 111)) ; 'o'
-        (set pos (add_i64 (local_get pos) (const_i64 1)))
-        (store_i8 (ptr_add (local_get unified) (local_get pos)) (const_i32 114)) ; 'r'
-        (set pos (add_i64 (local_get pos) (const_i64 1)))
-        (store_i8 (ptr_add (local_get unified) (local_get pos)) (const_i32 101)) ; 'e'
-        (set pos (add_i64 (local_get pos) (const_i64 1)))
-        (store_i8 (ptr_add (local_get unified) (local_get pos)) (const_i32 45))  ; '-'
-        (set pos (add_i64 (local_get pos) (const_i64 1)))
-        (store_i8 (ptr_add (local_get unified) (local_get pos)) (const_i32 118)) ; 'v'
-        (set pos (add_i64 (local_get pos) (const_i64 1)))
-        (store_i8 (ptr_add (local_get unified) (local_get pos)) (const_i32 101)) ; 'e'
-        (set pos (add_i64 (local_get pos) (const_i64 1)))
-        (store_i8 (ptr_add (local_get unified) (local_get pos)) (const_i32 114)) ; 'r'
-        (set pos (add_i64 (local_get pos) (const_i64 1)))
-        (store_i8 (ptr_add (local_get unified) (local_get pos)) (const_i32 115)) ; 's'
-        (set pos (add_i64 (local_get pos) (const_i64 1)))
-        (store_i8 (ptr_add (local_get unified) (local_get pos)) (const_i32 105)) ; 'i'
-        (set pos (add_i64 (local_get pos) (const_i64 1)))
-        (store_i8 (ptr_add (local_get unified) (local_get pos)) (const_i32 111)) ; 'o'
-        (set pos (add_i64 (local_get pos) (const_i64 1)))
-        (store_i8 (ptr_add (local_get unified) (local_get pos)) (const_i32 110)) ; 'n'
-        (set pos (add_i64 (local_get pos) (const_i64 1)))
-
-        ; "fn" (2 bytes)
-        (store_i8 (ptr_add (local_get unified) (local_get pos)) (const_i32 102)) ; 'f'
-        (set pos (add_i64 (local_get pos) (const_i64 1)))
-        (store_i8 (ptr_add (local_get unified) (local_get pos)) (const_i32 110)) ; 'n'
-        (set pos (add_i64 (local_get pos) (const_i64 1)))
-
-        ; "decls" (5 bytes)
-        (store_i8 (ptr_add (local_get unified) (local_get pos)) (const_i32 100)) ; 'd'
-        (set pos (add_i64 (local_get pos) (const_i64 1)))
-        (store_i8 (ptr_add (local_get unified) (local_get pos)) (const_i32 101)) ; 'e'
-        (set pos (add_i64 (local_get pos) (const_i64 1)))
-        (store_i8 (ptr_add (local_get unified) (local_get pos)) (const_i32 99))  ; 'c'
-        (set pos (add_i64 (local_get pos) (const_i64 1)))
-        (store_i8 (ptr_add (local_get unified) (local_get pos)) (const_i32 108)) ; 'l'
-        (set pos (add_i64 (local_get pos) (const_i64 1)))
-        (store_i8 (ptr_add (local_get unified) (local_get pos)) (const_i32 115)) ; 's'
-        (set pos (add_i64 (local_get pos) (const_i64 1)))
-
-        ; Copy original source
+        ; Copy original source after keywords + names
         (call_ptr memcpy
           (ptr_add (local_get unified) (local_get keywords_len))
           (param_get original_source)
@@ -296,6 +297,141 @@
         (return (local_get new_node))))
 
     ; =============================================================================
+    ; Struct name scanning helpers
+    ; =============================================================================
+
+    ; Return total bytes needed for all generated struct accessor names.
+    ; For each (struct NAME (field F T) ...) with N fields, we generate
+    ; N getter names (NAME_get_F) and N setter names (NAME_set_F), each of
+    ; length len(NAME) + 5 + len(F).
+    (fn scan_struct_total_len
+      (params (src_tree ptr) (source ptr))
+      (returns i64)
+      (do
+        (let total i64 (const_i64 0))
+        (let prog_first i64 (call_i64 node_first_child (param_get src_tree) (const_i64 0)))
+        (let scan i64 (call_i64 node_next_sibling (param_get src_tree) (local_get prog_first)))
+        (while
+          (condition (ne_i64 (local_get scan) (const_i64 -1)))
+          (do
+            (if
+              (condition (eq_i32 (call_i32 node_kind (param_get src_tree) (local_get scan)) (call_i32 node_list)))
+              (then (do
+                (let cf i64 (call_i64 node_first_child (param_get src_tree) (local_get scan)))
+                (if
+                  (condition (ne_i64 (local_get cf) (const_i64 -1)))
+                  (then (do
+                    (if
+                      (condition (ne_i32
+                        (call_i32 node_text_equals
+                          (param_get src_tree) (param_get source) (local_get cf)
+                          (const_string_ptr "struct") (const_i64 6))
+                        (const_i32 0)))
+                      (then (do
+                        (let sn    i64 (call_i64 node_next_sibling (param_get src_tree) (local_get cf)))
+                        (let slen  i64 (call_i64 node_text_len     (param_get src_tree) (local_get sn)))
+                        (let fnode i64 (call_i64 node_next_sibling (param_get src_tree) (local_get sn)))
+                        (while
+                          (condition (ne_i64 (local_get fnode) (const_i64 -1)))
+                          (do
+                            (if
+                              (condition (eq_i32 (call_i32 node_kind (param_get src_tree) (local_get fnode)) (call_i32 node_list)))
+                              (then (do
+                                (let fkw i64 (call_i64 node_first_child (param_get src_tree) (local_get fnode)))
+                                (if
+                                  (condition (ne_i32
+                                    (call_i32 node_text_equals
+                                      (param_get src_tree) (param_get source) (local_get fkw)
+                                      (const_string_ptr "field") (const_i64 5))
+                                    (const_i32 0)))
+                                  (then (do
+                                    (let fnm    i64 (call_i64 node_next_sibling (param_get src_tree) (local_get fkw)))
+                                    (let fnmlen i64 (call_i64 node_text_len     (param_get src_tree) (local_get fnm)))
+                                    (let onelen i64 (add_i64 (local_get slen) (add_i64 (const_i64 5) (local_get fnmlen))))
+                                    (set total (add_i64 (local_get total) (add_i64 (local_get onelen) (local_get onelen))))))
+                                  (else (do)))))
+                              (else (do)))
+                            (set fnode (call_i64 node_next_sibling (param_get src_tree) (local_get fnode)))))))
+                      (else (do)))))
+                  (else (do)))))
+              (else (do)))
+            (set scan (call_i64 node_next_sibling (param_get src_tree) (local_get scan)))))
+        (return (local_get total))))
+
+    ; Write all generated struct accessor names into buf.
+    ; Returns total bytes written (equals scan_struct_total_len result).
+    ; Layout: for each struct in source order, for each field in field order:
+    ;   NAME_get_FNAME   (len(NAME) + 5 + len(FNAME) bytes)
+    ;   NAME_set_FNAME   (same length)
+    (fn build_struct_names
+      (params (src_tree ptr) (source ptr) (buf ptr))
+      (returns i64)
+      (do
+        (let pos i64 (const_i64 0))
+        (let prog_first i64 (call_i64 node_first_child (param_get src_tree) (const_i64 0)))
+        (let scan i64 (call_i64 node_next_sibling (param_get src_tree) (local_get prog_first)))
+        (while
+          (condition (ne_i64 (local_get scan) (const_i64 -1)))
+          (do
+            (if
+              (condition (eq_i32 (call_i32 node_kind (param_get src_tree) (local_get scan)) (call_i32 node_list)))
+              (then (do
+                (let cf i64 (call_i64 node_first_child (param_get src_tree) (local_get scan)))
+                (if
+                  (condition (ne_i64 (local_get cf) (const_i64 -1)))
+                  (then (do
+                    (if
+                      (condition (ne_i32
+                        (call_i32 node_text_equals
+                          (param_get src_tree) (param_get source) (local_get cf)
+                          (const_string_ptr "struct") (const_i64 6))
+                        (const_i32 0)))
+                      (then (do
+                        (let sn    i64 (call_i64 node_next_sibling (param_get src_tree) (local_get cf)))
+                        (let snts  i64 (call_i64 node_text_start   (param_get src_tree) (local_get sn)))
+                        (let slen  i64 (call_i64 node_text_len     (param_get src_tree) (local_get sn)))
+                        (let fnode i64 (call_i64 node_next_sibling (param_get src_tree) (local_get sn)))
+                        (while
+                          (condition (ne_i64 (local_get fnode) (const_i64 -1)))
+                          (do
+                            (if
+                              (condition (eq_i32 (call_i32 node_kind (param_get src_tree) (local_get fnode)) (call_i32 node_list)))
+                              (then (do
+                                (let fkw i64 (call_i64 node_first_child (param_get src_tree) (local_get fnode)))
+                                (if
+                                  (condition (ne_i32
+                                    (call_i32 node_text_equals
+                                      (param_get src_tree) (param_get source) (local_get fkw)
+                                      (const_string_ptr "field") (const_i64 5))
+                                    (const_i32 0)))
+                                  (then (do
+                                    (let fnm   i64 (call_i64 node_next_sibling (param_get src_tree) (local_get fkw)))
+                                    (let fnmts i64 (call_i64 node_text_start   (param_get src_tree) (local_get fnm)))
+                                    (let fnmlen i64 (call_i64 node_text_len    (param_get src_tree) (local_get fnm)))
+                                    ; getter: NAME_get_FNAME
+                                    (call_ptr memcpy (ptr_add (param_get buf) (local_get pos)) (ptr_add (param_get source) (local_get snts))  (local_get slen))
+                                    (set pos (add_i64 (local_get pos) (local_get slen)))
+                                    (call_ptr memcpy (ptr_add (param_get buf) (local_get pos)) (const_string_ptr "_get_") (const_i64 5))
+                                    (set pos (add_i64 (local_get pos) (const_i64 5)))
+                                    (call_ptr memcpy (ptr_add (param_get buf) (local_get pos)) (ptr_add (param_get source) (local_get fnmts)) (local_get fnmlen))
+                                    (set pos (add_i64 (local_get pos) (local_get fnmlen)))
+                                    ; setter: NAME_set_FNAME
+                                    (call_ptr memcpy (ptr_add (param_get buf) (local_get pos)) (ptr_add (param_get source) (local_get snts))  (local_get slen))
+                                    (set pos (add_i64 (local_get pos) (local_get slen)))
+                                    (call_ptr memcpy (ptr_add (param_get buf) (local_get pos)) (const_string_ptr "_set_") (const_i64 5))
+                                    (set pos (add_i64 (local_get pos) (const_i64 5)))
+                                    (call_ptr memcpy (ptr_add (param_get buf) (local_get pos)) (ptr_add (param_get source) (local_get fnmts)) (local_get fnmlen))
+                                    (set pos (add_i64 (local_get pos) (local_get fnmlen)))))
+                                  (else (do)))))
+                              (else (do)))
+                            (set fnode (call_i64 node_next_sibling (param_get src_tree) (local_get fnode)))))))
+                      (else (do)))))
+                  (else (do)))))
+              (else (do)))
+            (set scan (call_i64 node_next_sibling (param_get src_tree) (local_get scan)))))
+        (return (local_get pos))))
+
+    ; =============================================================================
     ; Lowering transformation
     ; =============================================================================
 
@@ -306,14 +442,36 @@
       (params (src_tree ptr) (source ptr) (source_len i64) (out_unified_source ptr))
       (returns ptr)
       (do
-        ; Build unified source with WIR keywords + original source
+        ; Scan for struct declarations and build names buffer
+        (let names_len i64 (call_i64 scan_struct_total_len (param_get src_tree) (param_get source)))
+        (let names_buf ptr (const_null))
+        (if
+          (condition (gt_i64 (local_get names_len) (const_i64 0)))
+          (then (do
+            (set names_buf (call_ptr malloc (local_get names_len)))
+            (if
+              (condition (eq_ptr (local_get names_buf) (const_null)))
+              (then (do (return (const_null))))
+              (else (do)))
+            (call_i64 build_struct_names (param_get src_tree) (param_get source) (local_get names_buf))))
+          (else (do)))
+
+        ; Build unified source: [250-byte keyword prefix][struct names][original source]
         (let keywords_len_ptr ptr (call_ptr malloc (const_i64 8)))
         (let unified_source ptr (call_ptr build_unified_source
           (param_get source)
           (param_get source_len)
+          (local_get names_buf)
+          (local_get names_len)
           (local_get keywords_len_ptr)))
         (let keywords_len i64 (load_i64 (local_get keywords_len_ptr)))
         (call_void free (local_get keywords_len_ptr))
+
+        ; Free names_buf (content already memcpy'd into unified_source)
+        (if
+          (condition (ne_ptr (local_get names_buf) (const_null)))
+          (then (do (call_void free (local_get names_buf))))
+          (else (do)))
 
         (if
           (condition (eq_ptr (local_get unified_source) (const_null)))
@@ -625,6 +783,21 @@
                   (else (do)))))
               (else (do)))
             (set program_child (call_i64 node_next_sibling (param_get src_tree) (local_get program_child)))))
+
+        ; Generate struct accessor functions (getters and setters)
+        (if
+          (condition (gt_i64 (local_get names_len) (const_i64 0)))
+          (then (do
+            (let decls_prev_storage ptr (call_ptr malloc (const_i64 8)))
+            (store_i64 (local_get decls_prev_storage) (local_get decls_children_prev))
+            (call_void lower_struct_decls
+              (param_get src_tree)
+              (param_get source)
+              (local_get dest_tree)
+              (local_get decls_prev_storage))
+            (set decls_children_prev (load_i64 (local_get decls_prev_storage)))
+            (call_void free (local_get decls_prev_storage))))
+          (else (do)))
 
         ; Link decls children
         (call_void node_set_first_child
