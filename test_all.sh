@@ -85,6 +85,7 @@ get_expected_exit() {
     53_integration_multi_function_chain) echo 35  ;;
     54_integration_memory_flow)          echo 100 ;;
     55_new_operators)                    echo 40  ;;
+    56_extern_decl)                      echo 42  ;;
     *) echo 42 ;;
   esac
 }
