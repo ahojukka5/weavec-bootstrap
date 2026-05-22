@@ -217,14 +217,7 @@
               (then (do
                 ; Convert char to digit value (0-9)
                 (let digit_char i32 (sub_i32 (local_get ch) (const_i32 48)))
-                ; Convert to i64 by repeated addition (since digit is 0-9)
-                (let digit_i64 i64 (const_i64 0))
-                (let digit_counter i32 (local_get digit_char))
-                (while
-                  (condition (gt_i32 (local_get digit_counter) (const_i32 0)))
-                  (do
-                    (set digit_i64 (add_i64 (local_get digit_i64) (const_i64 1)))
-                    (set digit_counter (sub_i32 (local_get digit_counter) (const_i32 1)))))
+                (let digit_i64 i64 (cast_i32_to_i64 (local_get digit_char)))
                 ; result = result * 10 + digit
                 (set result (add_i64
                   (mul_i64 (local_get result) (const_i64 10))
