@@ -1,0 +1,20 @@
+(program
+  (name "if-test")
+  (version "0.1")
+  (entry main
+    (params)
+    (returns i32)
+    (do
+      (if
+        (condition
+          (lt_i32
+            (const_i32 1)
+            (const_i32 2)))
+        (then
+          (do
+            (return
+              (const_i32 42))))
+        (else
+          (do
+            (return
+              (const_i32 0))))))))

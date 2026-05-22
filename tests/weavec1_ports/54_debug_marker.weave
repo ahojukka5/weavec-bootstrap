@@ -1,0 +1,25 @@
+(program
+  (name "debug_marker")
+  (version "0.1")
+  (entry main
+    (params)
+          (returns i32)
+          (do
+            (let x i32
+              (const_i32 40)
+            )
+            (debug "this is my debug zone"
+              (do
+                (set x
+                  (add_i32
+                    (local_get x)
+                    (const_i32 2)
+                  )
+                )
+              )
+            )
+            (return
+              (local_get x)
+            )
+          )
+))

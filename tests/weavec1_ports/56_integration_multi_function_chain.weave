@@ -1,0 +1,12 @@
+(program
+  (name "integration_multi_function_chain")
+  (version "0.1")
+  (entry main
+    (params)
+          (returns i32)
+          (do
+            (return
+              (call_i32
+                calculate
+                (const_i32 5))))
+))

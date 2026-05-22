@@ -1,0 +1,34 @@
+(program
+  (name "i64-arithmetic")
+  (version "0.1")
+  (entry main)
+  (fn main
+        (params)
+        (returns i32)
+        (do
+          (let a i64
+            (const_i64 20)
+          )
+          (let b i64
+            (const_i64 2)
+          )
+          (let c i64
+            (mul_i64
+              (local_get b)
+              (const_i64 11)
+            )
+          )
+          (let d i64
+            (add_i64
+              (local_get a)
+              (local_get c)
+            )
+          )
+          (return
+            (cast_i64_to_i32
+              (local_get d)
+            )
+          )
+        )
+      )
+)

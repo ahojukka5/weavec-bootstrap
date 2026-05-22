@@ -1,0 +1,16 @@
+(program
+  (name "new_operators")
+  (version "0.1")
+  (entry main
+    (params)
+          (returns i32)
+          (do
+            (return (cast_i64_to_i32
+              (add_i64
+                (add_i64
+                  (call_i64 test_division)
+                  (cast_i32_to_i64 (call_i32 test_bitwise_i32)))
+                (add_i64
+                  (call_i64 test_bitwise_i64)
+                  (call_i64 test_shr))))))
+))

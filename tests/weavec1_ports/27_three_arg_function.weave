@@ -1,0 +1,16 @@
+(program
+  (name "three_arg_function")
+  (version "0.1")
+  (entry main
+    (params)
+          (returns i32)
+          (do
+            (return
+              (call_i32 add3
+                (const_i32 10)
+                (const_i32 20)
+                (const_i32 12)
+              )
+            )
+          )
+))

@@ -1,0 +1,32 @@
+(program
+  (name "two-arg-function")
+  (version "0.1")
+  (entry main)
+  (fn add
+        (params
+          (a i32)
+          (b i32)
+        )
+        (returns i32)
+        (do
+          (return
+            (add_i32
+              (param_get a)
+              (param_get b)
+            )
+          )
+        )
+      )
+      (fn main
+        (params)
+        (returns i32)
+        (do
+          (return
+            (call_i32 add
+              (const_i32 20)
+              (const_i32 22)
+            )
+          )
+        )
+      )
+)

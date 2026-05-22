@@ -1,0 +1,15 @@
+(program
+  (name "negative_i32_literal")
+  (version "0.1")
+  (entry main
+    (params)
+          (returns i32)
+          (do
+            (return
+              (add_i32
+                (const_i32 -8)
+                (const_i32 50)
+              )
+            )
+          )
+))

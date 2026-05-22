@@ -1,0 +1,30 @@
+(program
+  (name "integration_memory_flow")
+  (version "0.1")
+  (entry main
+    (params)
+          (returns i32)
+          (do
+            (let
+              buffer
+              ptr
+              (call_ptr
+                malloc
+                (const_i64 20)))
+            (call_void
+              write_values
+              (local_get buffer)
+              (const_i32 5))
+            (let
+              result
+              i32
+              (call_i32
+                sum_values
+                (local_get buffer)
+                (const_i32 5)))
+            (call_void
+              free
+              (local_get buffer))
+            (return
+              (local_get result)))
+))

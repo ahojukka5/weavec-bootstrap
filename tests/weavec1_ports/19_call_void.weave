@@ -1,0 +1,23 @@
+(program
+  (name "call-void")
+  (version "0.1")
+  (entry main)
+  (extern free
+        (params
+          (p ptr)
+        )
+        (returns void)
+      )
+      (fn main
+        (params)
+        (returns i32)
+        (do
+          (call_void free
+            (const_null)
+          )
+          (return
+            (const_i32 42)
+          )
+        )
+      )
+)

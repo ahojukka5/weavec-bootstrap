@@ -1,0 +1,15 @@
+(program
+  (name "mul_i32")
+  (version "0.1")
+  (entry main
+    (params)
+          (returns i32)
+          (do
+            (return
+              (mul_i32
+                (const_i32 6)
+                (const_i32 7)
+              )
+            )
+          )
+))

@@ -1,0 +1,12 @@
+(program
+  (name "forward_function_call")
+  (version "0.1")
+  (entry main
+    (params)
+          (returns i32)
+          (do
+            (return
+              (call_i32 answer)
+            )
+          )
+))
