@@ -89,7 +89,34 @@ get_expected_exit() {
   esac
 }
 
-# Test each .weave file
+# WIR-comparison tests: compile .weave and diff against .expected.wir
+for weave_file in tests/*.weave; do
+  test_name=$(basename "$weave_file" .weave)
+  expected_wir="tests/${test_name}.expected.wir"
+  wir_file="$BUILD_DIR/test_wir/${test_name}.wir"
+
+  log "Testing (wir): $test_name"
+
+  if ! $WEAVEFRONT "$weave_file" "$wir_file" 2>/dev/null; then
+    fail "$test_name: weavefront compilation failed"
+    continue
+  fi
+  chmod u+r "$wir_file" 2>/dev/null || true
+
+  actual_wir=$(cat "$wir_file")
+  expected=$(cat "$expected_wir")
+  if [[ "$actual_wir" != "$expected" ]]; then
+    fail "$test_name: WIR output mismatch"
+    echo "  expected: $expected" >&2
+    echo "  actual:   $actual_wir" >&2
+    continue
+  fi
+
+  log "  ✓ $test_name PASSED"
+  PASS_COUNT=$((PASS_COUNT + 1))
+done
+
+# End-to-end run tests
 for weave_file in "$TEST_DIR"/01_return_constant.weave; do
   test_name=$(basename "$weave_file" .weave)
   wir_file="$BUILD_DIR/test_wir/${test_name}.wir"
