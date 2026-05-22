@@ -258,7 +258,22 @@
             (return_void)))
           (else (do)))
 
-        ; Handle other atoms (ident, string) - read from source
+        ; Handle string atom - output with surrounding quotes
+        (if
+          (condition (eq_i32 (local_get kind) (call_i32 node_string)))
+          (then (do
+            (call_void buffer_append_byte (param_get buffer) (const_i32 34))  ; '"'
+            (let str_start i64 (call_i64 node_text_start (param_get tree) (param_get node_index)))
+            (let str_len i64 (call_i64 node_text_len (param_get tree) (param_get node_index)))
+            (call_void buffer_append_bytes
+              (param_get buffer)
+              (ptr_add (param_get source) (local_get str_start))
+              (local_get str_len))
+            (call_void buffer_append_byte (param_get buffer) (const_i32 34))  ; '"'
+            (return_void)))
+          (else (do)))
+
+        ; Handle other atoms (ident) - read from source
         (let text_start i64 (call_i64 node_text_start (param_get tree) (param_get node_index)))
         (let text_len i64 (call_i64 node_text_len (param_get tree) (param_get node_index)))
 

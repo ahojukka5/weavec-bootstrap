@@ -1,7 +1,8 @@
 (program
   (name "one-arg-function")
   (version "0.1")
-  (entry inc
+  (entry main)
+  (fn inc
     (params
       (x i32))
     (returns i32)
@@ -9,4 +10,11 @@
       (return
         (add_i32
           (param_get x)
-          (const_i32 1))))))
+          (const_i32 1)))))
+  (fn main
+    (params)
+    (returns i32)
+    (do
+      (return
+        (call_i32 inc
+          (const_i32 42))))))

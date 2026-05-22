@@ -466,61 +466,69 @@
         (let decls_children_prev i64 (local_get decls_ident))
         (let first_decl i64 (const_i64 -1))
 
-        ; First: Transform entry to fn
-        (let fn_node i64
-          (call_i64 tree_append_node
-            (local_get dest_tree)
-            (call_i32 node_list)
-            (const_i64 0)
-            (const_i64 1)
-            (const_i64 -1)
-            (const_i64 -1)
-            (const_i64 0)))
-
-        (let fn_ident i64
-          (call_i64 tree_append_node
-            (local_get dest_tree)
-            (call_i32 node_ident)
-            (const_i64 23)
-            (const_i64 2)
-            (const_i64 -1)
-            (const_i64 -1)
-            (const_i64 0)))
-
-        ; Copy remaining children of entry (name, params, returns, body)
+        ; Inspect entry: first child = "entry" keyword, second = name
         (let entry_first i64 (call_i64 node_first_child (param_get src_tree) (local_get entry_node)))
         (let entry_rest i64 (call_i64 node_next_sibling (param_get src_tree) (local_get entry_first)))
+        ; entry_rest is the name node; check if it has body children after it
+        (let entry_body_start i64 (call_i64 node_next_sibling (param_get src_tree) (local_get entry_rest)))
 
-        (let fn_children_prev i64 (local_get fn_ident))
+        ; Only transform entry to fn when it has an inline body (old format)
+        (if
+          (condition (ne_i64 (local_get entry_body_start) (const_i64 -1)))
+          (then (do
+            (let fn_node i64
+              (call_i64 tree_append_node
+                (local_get dest_tree)
+                (call_i32 node_list)
+                (const_i64 0)
+                (const_i64 1)
+                (const_i64 -1)
+                (const_i64 -1)
+                (const_i64 0)))
 
-        (while
-          (condition (ne_i64 (local_get entry_rest) (const_i64 -1)))
-          (do
-            (let copied_child i64 (call_i64 copy_node_with_offset
-              (param_get src_tree)
+            (let fn_ident i64
+              (call_i64 tree_append_node
+                (local_get dest_tree)
+                (call_i32 node_ident)
+                (const_i64 23)
+                (const_i64 2)
+                (const_i64 -1)
+                (const_i64 -1)
+                (const_i64 0)))
+
+            ; Copy all children of entry after "entry" keyword (name, params, returns, body)
+            (let fn_children_prev i64 (local_get fn_ident))
+
+            (while
+              (condition (ne_i64 (local_get entry_rest) (const_i64 -1)))
+              (do
+                (let copied_child i64 (call_i64 copy_node_with_offset
+                  (param_get src_tree)
+                  (local_get dest_tree)
+                  (local_get entry_rest)
+                  (local_get keywords_len)))
+
+                (call_void node_set_next_sibling
+                  (local_get dest_tree)
+                  (local_get fn_children_prev)
+                  (local_get copied_child))
+
+                (set fn_children_prev (local_get copied_child))
+                (set entry_rest (call_i64 node_next_sibling (param_get src_tree) (local_get entry_rest)))))
+
+            ; Link fn_node children
+            (call_void node_set_first_child
               (local_get dest_tree)
-              (local_get entry_rest)
-              (local_get keywords_len)))
+              (local_get fn_node)
+              (local_get fn_ident))
 
-            (call_void node_set_next_sibling
-              (local_get dest_tree)
-              (local_get fn_children_prev)
-              (local_get copied_child))
+            ; Add fn_node as first declaration
+            (set first_decl (local_get fn_node))
+            (set decls_children_prev (local_get fn_node))))
+          (else (do)))
 
-            (set fn_children_prev (local_get copied_child))
-            (set entry_rest (call_i64 node_next_sibling (param_get src_tree) (local_get entry_rest)))))
-
-        ; Link fn_node children
-        (call_void node_set_first_child
-          (local_get dest_tree)
-          (local_get fn_node)
-          (local_get fn_ident))
-
-        ; Add fn_node as first declaration
-        (set first_decl (local_get fn_node))
-        (set decls_children_prev (local_get fn_node))
-
-        ; Second: Copy all (fn ...) helper nodes
+        ; Copy all (fn ...) nodes from the program declarations
+        ; For name-only entry format this is the primary source of function declarations
         (set program_child (call_i64 node_next_sibling (param_get src_tree) (local_get program_first)))
         (while
           (condition (ne_i64 (local_get program_child) (const_i64 -1)))
@@ -550,6 +558,12 @@
                           (local_get dest_tree)
                           (local_get program_child)
                           (local_get keywords_len)))
+
+                        ; If first_decl not set yet (name-only entry), set it now
+                        (if
+                          (condition (eq_i64 (local_get first_decl) (const_i64 -1)))
+                          (then (do (set first_decl (local_get copied_fn))))
+                          (else (do)))
 
                         ; Link as sibling
                         (call_void node_set_next_sibling

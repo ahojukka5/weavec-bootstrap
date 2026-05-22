@@ -1,30 +1,29 @@
 (program
   (name "call_bool_direct")
   (version "0.1")
-  (entry main
+  (entry main)
+  (fn is_answer
+    (params
+      (x i32))
+    (returns bool)
+    (do
+      (return
+        (eq_i32
+          (param_get x)
+          (const_i32 42)))))
+  (fn main
     (params)
-          (returns i32)
+    (returns i32)
+    (do
+      (if
+        (condition
+          (call_bool is_answer
+            (const_i32 42)))
+        (then
           (do
-            (if
-              (condition
-                (call_bool is_answer
-                  (const_i32 42)
-                )
-              )
-              (then
-                (do
-                  (return
-                    (const_i32 42)
-                  )
-                )
-              )
-              (else
-                (do
-                  (return
-                    (const_i32 0)
-                  )
-                )
-              )
-            )
-          )
-))
+            (return
+              (const_i32 42))))
+        (else
+          (do
+            (return
+              (const_i32 0))))))))
