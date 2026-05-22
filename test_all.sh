@@ -99,7 +99,7 @@ for weave_file in "$TEST_DIR"/*.weave; do
   log "Testing: $test_name"
 
   # Step 1: Compile .weave to .wir
-  if ! $WEAVEFRONT "$weave_file" "$wir_file" 2>&1 | grep -q ""; then
+  if ! $WEAVEFRONT "$weave_file" "$wir_file" 2>/dev/null; then
     fail "$test_name: weavefront compilation failed"
     continue
   fi

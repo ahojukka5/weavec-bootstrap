@@ -3,11 +3,12 @@
 ; Transforms Surface Weave to WIR.
 ;
 ; Transformation:
-;   (program (name "x") (entry main ...)) → (core-module (core-version 1) (decls (fn main ...)))
+;   (program (name "x") (entry main ...) (fn helper ...)) → (core-module (core-version 1) (decls (fn main ...) (fn helper ...)))
 ;
 ; Strategy:
 ;   - Build new tree with WIR structure
-;   - Transform (entry name ...) to (fn name ...)
+;   - Transform (entry ...) to (fn ...)
+;   - Copy all (fn ...) nodes into (decls ...)
 ;   - Copy body recursively (already WIR-like)
 ;   - Ignore metadata nodes (name, version)
 
@@ -329,7 +330,7 @@
           (then (do (return (const_null))))
           (else (do)))
 
-        ; Find the (entry ...) node
+        ; Find the (entry ...) node and all (fn ...) nodes
         (let program_root i64 (const_i64 0))
         (let program_first i64 (call_i64 node_first_child (param_get src_tree) (local_get program_root)))
 
@@ -337,16 +338,18 @@
         (let program_child i64 (call_i64 node_next_sibling (param_get src_tree) (local_get program_first)))
 
         (let entry_node i64 (const_i64 -1))
+        (let fn_count i32 (const_i32 0))
 
-        ; Find (entry ...)
+        ; First pass: find entry node
+        (let temp_child i64 (local_get program_child))
         (while
-          (condition (ne_i64 (local_get program_child) (const_i64 -1)))
+          (condition (ne_i64 (local_get temp_child) (const_i64 -1)))
           (do
-            (let child_kind i32 (call_i32 node_kind (param_get src_tree) (local_get program_child)))
+            (let child_kind i32 (call_i32 node_kind (param_get src_tree) (local_get temp_child)))
             (if
               (condition (eq_i32 (local_get child_kind) (call_i32 node_list)))
               (then (do
-                (let child_first i64 (call_i64 node_first_child (param_get src_tree) (local_get program_child)))
+                (let child_first i64 (call_i64 node_first_child (param_get src_tree) (local_get temp_child)))
                 (if
                   (condition (ne_i64 (local_get child_first) (const_i64 -1)))
                   (then (do
@@ -360,14 +363,14 @@
                           (const_i64 5))
                         (const_i32 0)))
                       (then (do
-                        (set entry_node (local_get program_child))
-                        (set program_child (const_i64 -1))))
+                        (set entry_node (local_get temp_child))
+                        (set temp_child (const_i64 -1))))
                       (else (do
-                        (set program_child (call_i64 node_next_sibling (param_get src_tree) (local_get program_child))))))))
+                        (set temp_child (call_i64 node_next_sibling (param_get src_tree) (local_get temp_child))))))))
                   (else (do
-                    (set program_child (call_i64 node_next_sibling (param_get src_tree) (local_get program_child))))))))
+                    (set temp_child (call_i64 node_next_sibling (param_get src_tree) (local_get temp_child))))))))
               (else (do
-                (set program_child (call_i64 node_next_sibling (param_get src_tree) (local_get program_child))))))))
+                (set temp_child (call_i64 node_next_sibling (param_get src_tree) (local_get temp_child))))))))
 
         ; Check we found entry
         (if
@@ -459,8 +462,11 @@
             (const_i64 -1)
             (const_i64 0)))
 
-        ; Transform (entry ...) to (fn ...)
-        ; Copy entry node but change first child from "entry" to "fn"
+        ; Transform (entry ...) to (fn ...) and copy additional (fn ...) nodes
+        (let decls_children_prev i64 (local_get decls_ident))
+        (let first_decl i64 (const_i64 -1))
+
+        ; First: Transform entry to fn
         (let fn_node i64
           (call_i64 tree_append_node
             (local_get dest_tree)
@@ -485,7 +491,6 @@
         (let entry_first i64 (call_i64 node_first_child (param_get src_tree) (local_get entry_node)))
         (let entry_rest i64 (call_i64 node_next_sibling (param_get src_tree) (local_get entry_first)))
 
-        (let fn_children_first i64 (const_i64 -1))
         (let fn_children_prev i64 (local_get fn_ident))
 
         (while
@@ -496,11 +501,6 @@
               (local_get dest_tree)
               (local_get entry_rest)
               (local_get keywords_len)))
-
-            (if
-              (condition (eq_i64 (local_get fn_children_first) (const_i64 -1)))
-              (then (do (set fn_children_first (local_get copied_child))))
-              (else (do)))
 
             (call_void node_set_next_sibling
               (local_get dest_tree)
@@ -516,6 +516,53 @@
           (local_get fn_node)
           (local_get fn_ident))
 
+        ; Add fn_node as first declaration
+        (set first_decl (local_get fn_node))
+        (set decls_children_prev (local_get fn_node))
+
+        ; Second: Copy all (fn ...) helper nodes
+        (set program_child (call_i64 node_next_sibling (param_get src_tree) (local_get program_first)))
+        (while
+          (condition (ne_i64 (local_get program_child) (const_i64 -1)))
+          (do
+            (let fn_child_kind i32 (call_i32 node_kind (param_get src_tree) (local_get program_child)))
+            (if
+              (condition (eq_i32 (local_get fn_child_kind) (call_i32 node_list)))
+              (then (do
+                (let fn_child_first i64 (call_i64 node_first_child (param_get src_tree) (local_get program_child)))
+                (if
+                  (condition (ne_i64 (local_get fn_child_first) (const_i64 -1)))
+                  (then (do
+                    ; Check if this is a fn node
+                    (if
+                      (condition (ne_i32
+                        (call_i32 node_text_equals
+                          (param_get src_tree)
+                          (param_get source)
+                          (local_get fn_child_first)
+                          (const_string_ptr "fn")
+                          (const_i64 2))
+                        (const_i32 0)))
+                      (then (do
+                        ; Copy the entire fn node
+                        (let copied_fn i64 (call_i64 copy_node_with_offset
+                          (param_get src_tree)
+                          (local_get dest_tree)
+                          (local_get program_child)
+                          (local_get keywords_len)))
+
+                        ; Link as sibling
+                        (call_void node_set_next_sibling
+                          (local_get dest_tree)
+                          (local_get decls_children_prev)
+                          (local_get copied_fn))
+
+                        (set decls_children_prev (local_get copied_fn))))
+                      (else (do)))))
+                  (else (do)))))
+              (else (do)))
+            (set program_child (call_i64 node_next_sibling (param_get src_tree) (local_get program_child)))))
+
         ; Link decls children
         (call_void node_set_first_child
           (local_get dest_tree)
@@ -524,7 +571,7 @@
         (call_void node_set_next_sibling
           (local_get dest_tree)
           (local_get decls_ident)
-          (local_get fn_node))
+          (local_get first_decl))
 
         ; Link core-module children
         (call_void node_set_first_child

@@ -6,9 +6,10 @@
 ;   (program
 ;     (name "program-name")     ; optional
 ;     (version "0.1.0")         ; optional
-;     (entry main ...))         ; required, exactly one
+;     (entry main ...)          ; required entry point
+;     (fn helper ...))          ; optional helper functions
 ;
-; The body of entry can contain WIR-like forms - we don't validate those here.
+; The body of functions can contain WIR-like forms - we don't validate those here.
 
 (core-module
   (core-version 1)
@@ -166,7 +167,7 @@
           (then (do))
           (else (do (return (const_i32 1)))))
 
-        ; Look for (entry ...) - must have exactly one
+        ; Look for (entry ...) - required
         (let entry_node i64 (call_i64 find_child_with_ident
           (param_get tree)
           (param_get source)
