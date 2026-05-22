@@ -87,6 +87,7 @@ get_expected_exit() {
     55_new_operators)                    echo 40  ;;
     56_extern_decl)                      echo 42  ;;
     57_struct_basic)                     echo 42  ;;
+    58_const_decl)                       echo 42  ;;
     *) echo 42 ;;
   esac
 }

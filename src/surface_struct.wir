@@ -46,6 +46,9 @@
       (params (tree ptr) (source ptr) (index i64) (expected ptr) (expected_len i64))
       (returns i32))
 
+    ; Read value field of an int node
+    (extern node_value (params (tree ptr) (index i64)) (returns i64))
+
     ; ==========================================================================
     ; Low-level tree node constructors
     ; ==========================================================================
@@ -488,6 +491,143 @@
                                   (else (do)))))
                               (else (do)))
                             (set fnode (call_i64 node_next_sibling (param_get src_tree) (local_get fnode)))))))
+                      (else (do)))))
+                  (else (do)))))
+              (else (do)))
+            (set scan (call_i64 node_next_sibling (param_get src_tree) (local_get scan)))))
+
+        (store_i64 (param_get last_decl_ptr) (local_get last_decl))
+        (return_void)))
+
+    ; ==========================================================================
+    ; lower_const_decls: generate zero-arg WIR fn nodes for named constants
+    ;
+    ; Transforms (const NAME TYPE VALUE) into:
+    ;   (fn NAME (params) (returns TYPE) (do (return (const_TYPE VALUE))))
+    ;
+    ; Supports types: i64, i32, ptr.  For ptr, always emits (const_null).
+    ; VALUE must be a non-negative integer literal for i32/i64 constants.
+    ;
+    ; Parameters:
+    ;   src_tree      - parsed surface Weave AST
+    ;   source        - original source text (for node text comparison)
+    ;   dest_tree     - WIR output tree being built
+    ;   keywords_len  - offset of original source in unified source (= 250 + names_len)
+    ;   last_decl_ptr - ptr to i64: index of last-appended decl node; updated on return
+    ; ==========================================================================
+    (fn lower_const_decls
+      (params
+        (src_tree ptr)
+        (source ptr)
+        (dest_tree ptr)
+        (keywords_len i64)
+        (last_decl_ptr ptr))
+      (returns void)
+      (do
+        (let last_decl i64 (load_i64 (param_get last_decl_ptr)))
+
+        (let prog_first i64 (call_i64 node_first_child (param_get src_tree) (const_i64 0)))
+        (let scan i64 (call_i64 node_next_sibling (param_get src_tree) (local_get prog_first)))
+
+        (while
+          (condition (ne_i64 (local_get scan) (const_i64 -1)))
+          (do
+            (if
+              (condition (eq_i32 (call_i32 node_kind (param_get src_tree) (local_get scan)) (call_i32 node_list)))
+              (then (do
+                (let cf i64 (call_i64 node_first_child (param_get src_tree) (local_get scan)))
+                (if
+                  (condition (ne_i64 (local_get cf) (const_i64 -1)))
+                  (then (do
+                    (if
+                      (condition (ne_i32
+                        (call_i32 node_text_equals
+                          (param_get src_tree) (param_get source) (local_get cf)
+                          (const_string_ptr "const") (const_i64 5))
+                        (const_i32 0)))
+                      (then (do
+                        ; (const NAME TYPE VALUE)
+                        (let nm i64 (call_i64 node_next_sibling (param_get src_tree) (local_get cf)))
+                        (let ty i64 (call_i64 node_next_sibling (param_get src_tree) (local_get nm)))
+                        (let vl i64 (call_i64 node_next_sibling (param_get src_tree) (local_get ty)))
+
+                        ; fn name points to NAME in original source (adjusted by keywords_len)
+                        (let fn_ts i64 (add_i64 (param_get keywords_len) (call_i64 node_text_start (param_get src_tree) (local_get nm))))
+                        (let fn_tl i64 (call_i64 node_text_len (param_get src_tree) (local_get nm)))
+
+                        ; determine type ts and const op (default: i32)
+                        (let type_ts   i64 (const_i64 209)) ; i32
+                        (let const_ts  i64 (const_i64 216)) ; const_i32
+                        (let const_len i64 (const_i64 9))
+                        (let is_ptr    i32 (const_i32 0))
+                        (if
+                          (condition (ne_i32
+                            (call_i32 node_text_equals
+                              (param_get src_tree) (param_get source) (local_get ty)
+                              (const_string_ptr "i64") (const_i64 3))
+                            (const_i32 0)))
+                          (then (do
+                            (set type_ts  (const_i64 206)) ; i64
+                            (set const_ts (const_i64 120)) ; const_i64
+                          ))
+                          (else (do
+                            (if
+                              (condition (ne_i32
+                                (call_i32 node_text_equals
+                                  (param_get src_tree) (param_get source) (local_get ty)
+                                  (const_string_ptr "ptr") (const_i64 3))
+                                (const_i32 0)))
+                              (then (do
+                                (set type_ts  (const_i64 203)) ; ptr
+                                (set const_ts (const_i64 129)) ; const_null
+                                (set const_len (const_i64 10))
+                                (set is_ptr (const_i32 1))))
+                              (else (do))))))
+
+                        ; build (const_OP VALUE) or (const_null)
+                        (let cv_list i64 (call_i64 mk_list (param_get dest_tree)))
+                        (let cv_kw   i64 (call_i64 mk_ident (param_get dest_tree) (local_get const_ts) (local_get const_len)))
+                        (if
+                          (condition (eq_i32 (local_get is_ptr) (const_i32 0)))
+                          (then (do
+                            ; integer constant: (const_i64 VALUE) or (const_i32 VALUE)
+                            (let ival i64 (call_i64 node_value (param_get src_tree) (local_get vl)))
+                            (let vn i64 (call_i64 mk_int (param_get dest_tree) (local_get ival)))
+                            (call_void link2 (param_get dest_tree) cv_list cv_kw vn)))
+                          (else (do
+                            ; pointer constant: (const_null) with no argument
+                            (call_void link1 (param_get dest_tree) cv_list cv_kw))))
+
+                        ; (return (const_OP ...))
+                        (let ret_list i64 (call_i64 mk_list (param_get dest_tree)))
+                        (let ret_kw   i64 (call_i64 mk_ident (param_get dest_tree) (const_i64 72) (const_i64 6))) ; return
+                        (call_void link2 (param_get dest_tree) ret_list ret_kw cv_list)
+
+                        ; (do (return ...))
+                        (let do_list i64 (call_i64 mk_list (param_get dest_tree)))
+                        (let do_kw   i64 (call_i64 mk_ident (param_get dest_tree) (const_i64 49) (const_i64 2))) ; do
+                        (call_void link2 (param_get dest_tree) do_list do_kw ret_list)
+
+                        ; (params) — zero-parameter list
+                        (let ps_list i64 (call_i64 mk_list (param_get dest_tree)))
+                        (let ps_kw   i64 (call_i64 mk_ident (param_get dest_tree) (const_i64 36) (const_i64 6))) ; params
+                        (call_void link1 (param_get dest_tree) ps_list ps_kw)
+
+                        ; (returns TYPE)
+                        (let rs_list i64 (call_i64 mk_list (param_get dest_tree)))
+                        (let rs_kw   i64 (call_i64 mk_ident (param_get dest_tree) (const_i64 42) (const_i64 7))) ; returns
+                        (let rs_ty   i64 (call_i64 mk_ident (param_get dest_tree) (local_get type_ts) (const_i64 3)))
+                        (call_void link2 (param_get dest_tree) rs_list rs_kw rs_ty)
+
+                        ; (fn NAME params returns do)
+                        (let fn_list i64 (call_i64 mk_list (param_get dest_tree)))
+                        (let fn_kw   i64 (call_i64 mk_ident (param_get dest_tree) (const_i64 23) (const_i64 2))) ; fn
+                        (let fn_nm   i64 (call_i64 mk_ident (param_get dest_tree) (local_get fn_ts) (local_get fn_tl)))
+                        (call_void link5 (param_get dest_tree) fn_list fn_kw fn_nm ps_list rs_list do_list)
+
+                        ; link into decls chain
+                        (call_void node_set_next_sibling (param_get dest_tree) (local_get last_decl) (local_get fn_list))
+                        (set last_decl (local_get fn_list))))
                       (else (do)))))
                   (else (do)))))
               (else (do)))

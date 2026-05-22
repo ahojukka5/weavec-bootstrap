@@ -54,9 +54,12 @@
       (params (tree ptr) (source ptr) (node_index i64) (expected ptr) (expected_len i64))
       (returns i32))
 
-    ; External struct lowering (defined in surface_struct.wir)
+    ; External struct and const lowering (defined in surface_struct.wir)
     (extern lower_struct_decls
       (params (src_tree ptr) (source ptr) (dest_tree ptr) (last_decl_ptr ptr))
+      (returns void))
+    (extern lower_const_decls
+      (params (src_tree ptr) (source ptr) (dest_tree ptr) (keywords_len i64) (last_decl_ptr ptr))
       (returns void))
 
     ; =============================================================================
@@ -784,20 +787,19 @@
               (else (do)))
             (set program_child (call_i64 node_next_sibling (param_get src_tree) (local_get program_child)))))
 
-        ; Generate struct accessor functions (getters and setters)
+        ; Generate struct accessor functions and named constant functions
+        (let decls_prev_storage ptr (call_ptr malloc (const_i64 8)))
+        (store_i64 (local_get decls_prev_storage) (local_get decls_children_prev))
         (if
           (condition (gt_i64 (local_get names_len) (const_i64 0)))
           (then (do
-            (let decls_prev_storage ptr (call_ptr malloc (const_i64 8)))
-            (store_i64 (local_get decls_prev_storage) (local_get decls_children_prev))
             (call_void lower_struct_decls
-              (param_get src_tree)
-              (param_get source)
-              (local_get dest_tree)
-              (local_get decls_prev_storage))
-            (set decls_children_prev (load_i64 (local_get decls_prev_storage)))
-            (call_void free (local_get decls_prev_storage))))
+              (param_get src_tree) (param_get source) (local_get dest_tree) (local_get decls_prev_storage))))
           (else (do)))
+        (call_void lower_const_decls
+          (param_get src_tree) (param_get source) (local_get dest_tree) (local_get keywords_len) (local_get decls_prev_storage))
+        (set decls_children_prev (load_i64 (local_get decls_prev_storage)))
+        (call_void free (local_get decls_prev_storage))
 
         ; Link decls children
         (call_void node_set_first_child
