@@ -97,6 +97,7 @@ for weave_file in tests/*.weave; do
 
   log "Testing (wir): $test_name"
 
+  rm -f "$wir_file"
   if ! $WEAVEFRONT "$weave_file" "$wir_file" 2>/dev/null; then
     fail "$test_name: weavefront compilation failed"
     continue
@@ -126,6 +127,7 @@ for weave_file in "$TEST_DIR"/01_return_constant.weave; do
   log "Testing: $test_name"
 
   # Step 1: Compile .weave to .wir
+  rm -f "$wir_file"
   if ! $WEAVEFRONT "$weave_file" "$wir_file" 2>/dev/null; then
     fail "$test_name: weavefront compilation failed"
     continue
