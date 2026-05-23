@@ -157,8 +157,23 @@
         (let count i64 (call_i64 tree_count (param_get tree)))
         (let capacity i64 (load_i64 (ptr_add (param_get tree) (const_i64 16))))
 
-        ; TODO: Grow capacity if needed
-        ; For now, assume initial capacity is sufficient
+        ; Grow capacity if needed (double when full)
+        (if
+          (condition (eq_i64 (local_get count) (local_get capacity)))
+          (then (do
+            (let new_capacity i64 (mul_i64 (local_get capacity) (const_i64 2)))
+            (let nodes ptr (load_ptr (param_get tree)))
+            (let new_nodes ptr
+              (call_ptr realloc
+                (local_get nodes)
+                (mul_i64 (local_get new_capacity) (call_i64 tree_node_size))))
+            (if
+              (condition (eq_ptr (local_get new_nodes) (const_null)))
+              (then (do (return (const_i64 -1))))
+              (else (do)))
+            (store_ptr (param_get tree) (local_get new_nodes))
+            (store_i64 (ptr_add (param_get tree) (const_i64 16)) (local_get new_capacity))))
+          (else (do)))
 
         ; Get pointer to new node
         (let node ptr (call_ptr tree_node_at (param_get tree) (local_get count)))

@@ -77,8 +77,31 @@
       (returns bool)
       (do
         (let count i64 (load_i64 (ptr_add (param_get tokens) (const_i64 32))))
+        (let capacity i64 (load_i64 (ptr_add (param_get tokens) (const_i64 40))))
 
-        ; TODO: Grow if needed
+        ; Grow arrays if needed (double capacity)
+        (if
+          (condition (eq_i64 (local_get count) (local_get capacity)))
+          (then (do
+            (let new_cap i64 (mul_i64 (local_get capacity) (const_i64 2)))
+            (let new_kinds ptr (call_ptr realloc
+              (load_ptr (param_get tokens))
+              (mul_i64 (local_get new_cap) (const_i64 4))))
+            (let new_starts ptr (call_ptr realloc
+              (load_ptr (ptr_add (param_get tokens) (const_i64 8)))
+              (mul_i64 (local_get new_cap) (const_i64 8))))
+            (let new_lengths ptr (call_ptr realloc
+              (load_ptr (ptr_add (param_get tokens) (const_i64 16)))
+              (mul_i64 (local_get new_cap) (const_i64 8))))
+            (let new_values ptr (call_ptr realloc
+              (load_ptr (ptr_add (param_get tokens) (const_i64 24)))
+              (mul_i64 (local_get new_cap) (const_i64 8))))
+            (store_ptr (param_get tokens) (local_get new_kinds))
+            (store_ptr (ptr_add (param_get tokens) (const_i64 8)) (local_get new_starts))
+            (store_ptr (ptr_add (param_get tokens) (const_i64 16)) (local_get new_lengths))
+            (store_ptr (ptr_add (param_get tokens) (const_i64 24)) (local_get new_values))
+            (store_i64 (ptr_add (param_get tokens) (const_i64 40)) (local_get new_cap))))
+          (else (do)))
 
         ; Get array pointers
         (let kinds ptr (load_ptr (param_get tokens)))
