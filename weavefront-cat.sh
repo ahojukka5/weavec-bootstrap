@@ -27,7 +27,7 @@ if [[ ! -x "$WEAVEFRONT" ]]; then
   exit 1
 fi
 
-TMP=$(mktemp /tmp/wfcat.XXXXXX.weave)
+TMP=$(mktemp /tmp/wfcat.XXXXXX)
 trap 'rm -f "$TMP"' EXIT
 
 {
