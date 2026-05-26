@@ -1,0 +1,67 @@
+# SPDX-License-Identifier: Apache-2.0
+#
+# Continuous integration for weavefront.
+#
+# Builds weavefront from source and runs the full test ladder on Linux
+# and macOS using the platform's stable LLVM toolchain. The build.sh
+# script auto-fetches the pinned weavec0 and weavec1 tags (defaults
+# v0.2.0 and v0.1.0) from GitHub into build/vendor/; CI uses those
+# defaults unless WEAVEC0_TAG / WEAVEC1_TAG are explicitly overridden
+# below.
+
+name: ci
+
+on:
+  push:
+    branches: [master]
+  pull_request:
+    branches: [master]
+
+jobs:
+  test:
+    name: build & test (${{ matrix.os }})
+    runs-on: ${{ matrix.os }}
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-latest, macos-latest]
+
+    env:
+      # Pin the dependency tags CI builds against. Bump these when
+      # weavec0 / weavec1 cut new releases that weavefront has actually
+      # been validated against.
+      WEAVEC0_TAG: v0.2.0
+      WEAVEC1_TAG: v0.1.0
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Install LLVM toolchain (Linux)
+        if: runner.os == 'Linux'
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y llvm clang
+          echo "Tool versions:"
+          clang --version
+          llvm-as --version
+          llvm-link --version
+
+      - name: Install LLVM toolchain (macOS)
+        if: runner.os == 'macOS'
+        run: |
+          brew install llvm
+          echo "$(brew --prefix llvm)/bin" >> "$GITHUB_PATH"
+
+      - name: Verify toolchain (macOS)
+        if: runner.os == 'macOS'
+        run: |
+          clang --version
+          llvm-as --version
+          llvm-link --version
+
+      - name: Build weavec0 + weavec1 dependencies, build weavefront
+        run: ./build.sh
+
+      - name: Run weavefront test ladder
+        run: ./test_all.sh
