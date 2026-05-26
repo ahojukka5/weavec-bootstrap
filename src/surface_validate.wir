@@ -1,3 +1,4 @@
+; SPDX-License-Identifier: Apache-2.0
 ; surface_validate.wir
 ;
 ; Validates Surface Weave program structure.

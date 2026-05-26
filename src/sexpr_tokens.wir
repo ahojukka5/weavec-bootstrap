@@ -1,3 +1,4 @@
+; SPDX-License-Identifier: Apache-2.0
 ; sexpr_tokens.wir
 ;
 ; Generic S-expression token kind constants.

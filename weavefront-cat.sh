@@ -1,4 +1,5 @@
 #!/usr/bin/env bash
+# SPDX-License-Identifier: Apache-2.0
 # weavefront-cat.sh — concatenate multiple .weave files into one and compile.
 #
 # Usage: weavefront-cat.sh <output.wir> <file1.weave> [file2.weave ...]

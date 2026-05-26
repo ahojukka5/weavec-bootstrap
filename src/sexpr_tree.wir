@@ -1,3 +1,4 @@
+; SPDX-License-Identifier: Apache-2.0
 ; sexpr_tree.wir
 ;
 ; Generic S-expression tree structure.

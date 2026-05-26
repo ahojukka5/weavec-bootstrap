@@ -1,3 +1,4 @@
+; SPDX-License-Identifier: Apache-2.0
 ; sexpr_print.wir
 ;
 ; Generic S-expression pretty-printer.
