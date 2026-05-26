@@ -25,10 +25,10 @@ fail() {
 log "Test 01: return_42"
 log "  Compiling Surface Weave to WIR..."
 rm -f "$BUILD_DIR/01_return_42.wir"  # Remove old output
-$WEAVEFRONT tests/01_return_42.weave "$BUILD_DIR/01_return_42.wir" || fail "weavefront compilation failed"
+$WEAVEFRONT test/01_return_42.weave "$BUILD_DIR/01_return_42.wir" || fail "weavefront compilation failed"
 
 log "  Comparing WIR output..."
-if ! diff tests/01_return_42.expected.wir "$BUILD_DIR/01_return_42.wir"; then
+if ! diff test/01_return_42.expected.wir "$BUILD_DIR/01_return_42.wir"; then
   fail "WIR output mismatch"
 fi
 

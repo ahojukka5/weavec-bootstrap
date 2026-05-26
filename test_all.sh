@@ -93,9 +93,9 @@ get_expected_exit() {
 }
 
 # WIR-comparison tests: compile .weave and diff against .expected.wir
-for weave_file in tests/*.weave; do
+for weave_file in test/*.weave; do
   test_name=$(basename "$weave_file" .weave)
-  expected_wir="tests/${test_name}.expected.wir"
+  expected_wir="test/${test_name}.expected.wir"
   wir_file="$BUILD_DIR/test_wir/${test_name}.wir"
 
   log "Testing (wir): $test_name"
@@ -121,7 +121,7 @@ for weave_file in tests/*.weave; do
 done
 
 # End-to-end run tests: compile .wir through weavec1, link, and run
-for weave_file in tests/*.weave; do
+for weave_file in test/*.weave; do
   test_name=$(basename "$weave_file" .weave)
   wir_file="$BUILD_DIR/test_wir/${test_name}.wir"
   ll_file="$BUILD_DIR/test_ll/${test_name}.ll"
