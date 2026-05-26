@@ -1,10 +1,23 @@
 #!/usr/bin/env bash
+# SPDX-License-Identifier: Apache-2.0
 set -euo pipefail
 
-WEAVEFRONT="./build/weavefront"
-WEAVEC1="../weavec1/build/weavec1"
-RUNTIME="../weavec0/runtime.c"
-BUILD_DIR="build"
+# Single-test smoke for weavefront. Useful when iterating on the
+# front-end alone — the full ladder is in test_all.sh.
+#
+# Requires ./build.sh to have run first. WEAVEC0 / WEAVEC1 env vars
+# select which dependency copies to test against (same conventions
+# as build.sh / test_all.sh).
+
+WEAVEFRONT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+BUILD_DIR="$WEAVEFRONT_DIR/build"
+VENDOR_DIR="$BUILD_DIR/vendor"
+
+WEAVEFRONT="$BUILD_DIR/weavefront"
+WEAVEC0_DIR="${WEAVEC0:-$VENDOR_DIR/weavec0}"
+WEAVEC1_DIR="${WEAVEC1:-$VENDOR_DIR/weavec1}"
+WEAVEC1_BIN="$WEAVEC1_DIR/build/weavec1"
+RUNTIME="$WEAVEC0_DIR/runtime.c"
 
 log() {
   echo "[test] $*"
@@ -15,11 +28,9 @@ fail() {
   exit 1
 }
 
-# Check weavefront exists
 [[ -x "$WEAVEFRONT" ]] || fail "weavefront not found at $WEAVEFRONT (run ./build.sh first)"
-
-# Check weavec1 exists
-[[ -x "$WEAVEC1" ]] || fail "weavec1 not found at $WEAVEC1"
+[[ -x "$WEAVEC1_BIN" ]] || fail "weavec1 not found at $WEAVEC1_BIN (run ./build.sh first or set WEAVEC1)"
+[[ -f "$RUNTIME" ]] || fail "runtime not found at $RUNTIME (run ./build.sh first or set WEAVEC0)"
 
 # Test 01: return_42
 log "Test 01: return_42"
@@ -33,7 +44,7 @@ if ! diff test/01_return_42.expected.wir "$BUILD_DIR/01_return_42.wir"; then
 fi
 
 log "  Compiling WIR to LLVM IR..."
-$WEAVEC1 "$BUILD_DIR/01_return_42.wir" "$BUILD_DIR/01_return_42.ll" || fail "weavec1 compilation failed"
+"$WEAVEC1_BIN" "$BUILD_DIR/01_return_42.wir" "$BUILD_DIR/01_return_42.ll" || fail "weavec1 compilation failed"
 
 log "  Validating LLVM IR..."
 llvm-as "$BUILD_DIR/01_return_42.ll" -o "$BUILD_DIR/01_return_42.bc" || fail "LLVM validation failed"

@@ -1,10 +1,22 @@
 #!/usr/bin/env bash
+# SPDX-License-Identifier: Apache-2.0
 set -euo pipefail
 
-WEAVEFRONT="./build/weavefront"
-WEAVEC1="../weavec1/build/weavec1"
-RUNTIME="../weavec0/runtime.c"
-BUILD_DIR="build"
+# weavefront test ladder.
+#
+# Requires ./build.sh to have run first (it lays down build/vendor/
+# unless WEAVEC0 / WEAVEC1 are pointed elsewhere). The same env vars
+# pick which weavec0 / weavec1 to test against here.
+
+WEAVEFRONT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+BUILD_DIR="$WEAVEFRONT_DIR/build"
+VENDOR_DIR="$BUILD_DIR/vendor"
+
+WEAVEFRONT="$BUILD_DIR/weavefront"
+WEAVEC0_DIR="${WEAVEC0:-$VENDOR_DIR/weavec0}"
+WEAVEC1_DIR="${WEAVEC1:-$VENDOR_DIR/weavec1}"
+WEAVEC1_BIN="$WEAVEC1_DIR/build/weavec1"
+RUNTIME="$WEAVEC0_DIR/runtime.c"
 
 PASS_COUNT=0
 FAIL_COUNT=0
@@ -18,11 +30,9 @@ fail() {
   FAIL_COUNT=$((FAIL_COUNT + 1))
 }
 
-# Check weavefront exists
 [[ -x "$WEAVEFRONT" ]] || { echo "weavefront not found at $WEAVEFRONT (run ./build.sh first)" >&2; exit 1; }
-
-# Check weavec1 exists
-[[ -x "$WEAVEC1" ]] || { echo "weavec1 not found at $WEAVEC1" >&2; exit 1; }
+[[ -x "$WEAVEC1_BIN" ]] || { echo "weavec1 not found at $WEAVEC1_BIN (run ./build.sh first or set WEAVEC1)" >&2; exit 1; }
+[[ -f "$RUNTIME" ]] || { echo "runtime not found at $RUNTIME (run ./build.sh first or set WEAVEC0)" >&2; exit 1; }
 
 # Create build directory
 mkdir -p "$BUILD_DIR/test_wir" "$BUILD_DIR/test_ll" "$BUILD_DIR/test_bin"
@@ -140,7 +150,7 @@ for weave_file in test/*.weave; do
   fi
 
   # Step 2: Compile .wir to .ll
-  if ! $WEAVEC1 "$wir_file" "$ll_file" 2>&1 | grep -q "compilation succeeded"; then
+  if ! "$WEAVEC1_BIN" "$wir_file" "$ll_file" 2>&1 | grep -q "compilation succeeded"; then
     fail "$test_name: weavec1 compilation failed"
     continue
   fi
