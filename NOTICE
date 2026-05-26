@@ -1,0 +1,12 @@
+weavefront — Weave Surface Language Frontend
+Copyright 2026 Jukka Aho
+
+This product includes software developed as the surface-language
+frontend for the Weave programming language: it converts
+`.weave` source files (surface syntax) to `.wir` files (the
+stable Weave Intermediate Representation contract). The compiler
+itself is written in WIR.
+
+Upstream:    https://github.com/ahojukka5/weavefront
+Dependency:  https://github.com/ahojukka5/weavec0  (pinned via WEAVEC0_TAG)
+Dependency:  https://github.com/ahojukka5/weavec1  (pinned via WEAVEC1_TAG)
