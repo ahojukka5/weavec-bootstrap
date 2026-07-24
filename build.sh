@@ -26,6 +26,7 @@ BUILD_DIR="$WEAVEC_BOOTSTRAP_DIR/build"
 VENDOR_DIR="$BUILD_DIR/vendor"
 TOOLCHAIN_ENV="$BUILD_DIR/toolchain.env"
 SEXPR_LIBRARY="$BUILD_DIR/libweave-sexpr.bc"
+STACK_SIZE="0x1000000"
 
 WEAVEC1_VERSION="${WEAVEC1_VERSION:-v0.2.0}"
 WEAVEC1_TAG="${WEAVEC1_TAG:-$WEAVEC1_VERSION}"
@@ -234,11 +235,13 @@ link_with_sdk() {
   case "$WEAVEC1_LIBC" in
     glibc)
       clang -static "$object" "$RUNTIME_LIBRARY" \
+        -Wl,-z,stack-size="$STACK_SIZE" \
         -o "$BUILD_DIR/weavec-bootstrap"
       ;;
     musl)
       require_tool musl-gcc
       musl-gcc -static "$object" "$RUNTIME_LIBRARY" \
+        -Wl,-z,stack-size="$STACK_SIZE" \
         -o "$BUILD_DIR/weavec-bootstrap"
       ;;
   esac
@@ -246,8 +249,15 @@ link_with_sdk() {
 
 link_with_source() {
   log "linking weavec-bootstrap with source runtime fallback"
-  clang "$BUILD_DIR/weavec-bootstrap.bc" "$RUNTIME_C" \
-    -o "$BUILD_DIR/weavec-bootstrap"
+  if [[ "$(uname -s)" == Darwin ]]; then
+    clang "$BUILD_DIR/weavec-bootstrap.bc" "$RUNTIME_C" \
+      -Wl,-stack_size,"$STACK_SIZE" \
+      -o "$BUILD_DIR/weavec-bootstrap"
+  else
+    clang "$BUILD_DIR/weavec-bootstrap.bc" "$RUNTIME_C" \
+      -Wl,-z,stack-size="$STACK_SIZE" \
+      -o "$BUILD_DIR/weavec-bootstrap"
+  fi
 }
 
 link_and_compile() {
