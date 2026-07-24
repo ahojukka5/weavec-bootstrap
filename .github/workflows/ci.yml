@@ -1,14 +1,4 @@
 # SPDX-License-Identifier: Apache-2.0
-#
-# Continuous integration for weavefront.
-#
-# Builds weavefront from source and runs the full test ladder on Linux
-# and macOS using the platform's stable LLVM toolchain. The build.sh
-# script auto-fetches the pinned weavec0 and weavec1 tags (defaults
-# v0.2.0 and v0.1.0) from GitHub into build/vendor/; CI uses those
-# defaults unless WEAVEC0_TAG / WEAVEC1_TAG are explicitly overridden
-# below.
-
 name: ci
 
 on:
@@ -19,33 +9,47 @@ on:
 
 jobs:
   test:
-    name: build & test (${{ matrix.os }})
+    name: build & test (${{ matrix.name }})
     runs-on: ${{ matrix.os }}
+    timeout-minutes: 25
     strategy:
       fail-fast: false
       matrix:
-        os: [ubuntu-latest, macos-latest]
+        include:
+          - name: linux-glibc-sdk
+            os: ubuntu-latest
+            libc: glibc
+          - name: linux-musl-sdk
+            os: ubuntu-latest
+            libc: musl
+          - name: macos-source-fallback
+            os: macos-latest
+            libc: glibc
 
     env:
-      # Pin the dependency tags CI builds against. Bump these when
-      # weavec0 / weavec1 cut new releases that weavefront has actually
-      # been validated against.
-      WEAVEC0_TAG: v0.2.0
-      WEAVEC1_TAG: v0.1.0
+      WEAVEC1_VERSION: v0.2.0
+      WEAVEC1_TAG: v0.2.0
+      WEAVEC1_LIBC: ${{ matrix.libc }}
+      WEAVEC0_TAG: v0.2.1
 
     steps:
       - name: Checkout
         uses: actions/checkout@v4
 
-      - name: Install LLVM toolchain (Linux)
+      - name: Install LLVM and SDK tools (Linux)
         if: runner.os == 'Linux'
         run: |
           sudo apt-get update
-          sudo apt-get install -y llvm clang
-          echo "Tool versions:"
+          sudo apt-get install -y \
+            binutils \
+            clang \
+            curl \
+            llvm \
+            musl-tools
           clang --version
           llvm-as --version
           llvm-link --version
+          musl-gcc --version
 
       - name: Install LLVM toolchain (macOS)
         if: runner.os == 'macOS'
@@ -60,8 +64,19 @@ jobs:
           llvm-as --version
           llvm-link --version
 
-      - name: Build weavec0 + weavec1 dependencies, build weavefront
-        run: ./build.sh
+      - name: Build weavefront
+        run: ./build.sh 2>&1 | tee build.log
 
       - name: Run weavefront test ladder
-        run: ./test_all.sh
+        run: ./test_all.sh 2>&1 | tee test.log
+
+      - name: Upload failed logs
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: logs-${{ matrix.name }}
+          path: |
+            build.log
+            test.log
+          if-no-files-found: ignore
+          retention-days: 7
