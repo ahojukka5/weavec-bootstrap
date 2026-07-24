@@ -41,6 +41,9 @@ named `weavefront` through release `v0.1.0`. The format follows
   used by active lowering modules.
 - The bootstrap CLI diagnostics and their explicit WIR byte lengths now use the
   canonical `weavec-bootstrap` command name.
+- The bootstrap executable now owns its 16 MiB main-thread stack requirement on
+  Linux and macOS, so downstream compilers no longer patch this repository's
+  build script.
 
 ## [0.1.0] — 2026-05-27
 
