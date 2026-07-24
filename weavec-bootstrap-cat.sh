@@ -1,8 +1,8 @@
 #!/usr/bin/env bash
 # SPDX-License-Identifier: Apache-2.0
-# weavec-bootstrap-cat.sh — combine multiple .weave programs and lower to WIR.
+# weavec-bootstrap-cat — combine multiple .weave programs and lower to WIR.
 #
-# Usage: weavec-bootstrap-cat.sh <output.wir> <file1.weave> [file2.weave ...]
+# Usage: weavec-bootstrap-cat <output.wir> <file1.weave> [file2.weave ...]
 #
 # Each file must be a well-formed surface Weave program:
 #   (program (name "...") (version "...") <decls...>)
@@ -12,8 +12,9 @@
 
 set -euo pipefail
 
+command_name="$(basename "$0")"
 if [[ $# -lt 2 ]]; then
-  echo "Usage: weavec-bootstrap-cat.sh <output.wir> <file1.weave> [file2.weave ...]" >&2
+  echo "Usage: $command_name <output.wir> <file1.weave> [file2.weave ...]" >&2
   exit 1
 fi
 
@@ -21,10 +22,19 @@ OUTPUT="$1"
 shift
 FILES=("$@")
 
-WEAVEC_BOOTSTRAP="${WEAVEC_BOOTSTRAP:-$(dirname "$0")/build/weavec-bootstrap}"
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+if [[ -n "${WEAVEC_BOOTSTRAP:-}" ]]; then
+  COMPILER="$WEAVEC_BOOTSTRAP"
+elif [[ -x "$SCRIPT_DIR/weavec-bootstrap" ]]; then
+  # Installed SDK layout: bin/weavec-bootstrap-cat beside bin/weavec-bootstrap.
+  COMPILER="$SCRIPT_DIR/weavec-bootstrap"
+else
+  # Source-tree layout.
+  COMPILER="$SCRIPT_DIR/build/weavec-bootstrap"
+fi
 
-if [[ ! -x "$WEAVEC_BOOTSTRAP" ]]; then
-  echo "weavec-bootstrap-cat: compiler not found at $WEAVEC_BOOTSTRAP (run ./build.sh first)" >&2
+if [[ ! -x "$COMPILER" ]]; then
+  echo "$command_name: compiler not found at $COMPILER" >&2
   exit 1
 fi
 
@@ -124,4 +134,4 @@ PYEOF
   echo ")"
 } > "$TMP"
 
-exec "$WEAVEC_BOOTSTRAP" "$TMP" "$OUTPUT"
+exec "$COMPILER" "$TMP" "$OUTPUT"

@@ -7,6 +7,17 @@ named `weavefront` through release `v0.1.0`. The format follows
 
 ## [Unreleased]
 
+## [0.2.0] — 2026-07-24
+
+### Added
+
+- Static Linux x86-64 SDK archives for glibc and musl.
+- `bin/weavec-bootstrap-cat` as an installed-layout multifile driver.
+- `lib/libweave-sexpr.bc` as the versioned downstream parser-library boundary.
+- `SDK-MANIFEST`, `VERSION`, release checksums, packaging smoke tests, and
+  automated GitHub Release publication.
+- `docs/RELEASING.md` for the SDK contract and release process.
+
 ### Changed
 
 - Renamed the repository from `weavefront` to `weavec-bootstrap` to distinguish
@@ -41,9 +52,11 @@ named `weavefront` through release `v0.1.0`. The format follows
   used by active lowering modules.
 - The bootstrap CLI diagnostics and their explicit WIR byte lengths now use the
   canonical `weavec-bootstrap` command name.
-- The bootstrap executable now owns its 16 MiB main-thread stack requirement on
+- The bootstrap executable owns its 16 MiB main-thread stack requirement on
   Linux and macOS, so downstream compilers no longer patch this repository's
   build script.
+- The multifile driver resolves either the source-tree compiler or the sibling
+  executable in an extracted SDK.
 
 ## [0.1.0] — 2026-05-27
 
