@@ -64,10 +64,17 @@ jobs:
           llvm-as --version
           llvm-link --version
 
-      - name: Build weavefront
+      - name: Build weavec-bootstrap
         run: ./build.sh 2>&1 | tee build.log
 
-      - name: Run weavefront test ladder
+      - name: Verify canonical artifacts
+        run: |
+          test -x build/weavec-bootstrap
+          test -s build/weavec-bootstrap.bc
+          test -s build/libweave-sexpr.bc
+          test ! -e build/weavefront
+
+      - name: Run weavec-bootstrap test ladder
         run: ./test_all.sh 2>&1 | tee test.log
 
       - name: Upload failed logs
