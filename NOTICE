@@ -1,12 +1,14 @@
-weavefront — Weave Surface Language Frontend
+weavec-bootstrap — Surface Weave Bootstrap Frontend
 Copyright 2026 Jukka Aho
 
-This product includes software developed as the surface-language
-frontend for the Weave programming language: it converts
-`.weave` source files (surface syntax) to `.wir` files (the
-stable Weave Intermediate Representation contract). The compiler
-itself is written in WIR.
+This product includes software developed as the deterministic bootstrap
+frontend for the Weave programming language. It converts `.weave` surface
+source to the stable `.wir` Weave Intermediate Representation and is itself
+written in WIR.
 
-Upstream:    https://github.com/ahojukka5/weavefront
-Dependency:  https://github.com/ahojukka5/weavec0  (pinned via WEAVEC0_TAG)
-Dependency:  https://github.com/ahojukka5/weavec1  (pinned via WEAVEC1_TAG)
+The repository was formerly named `weavefront`.
+
+Upstream:    https://github.com/ahojukka5/weavec-bootstrap
+Dependency:  https://github.com/ahojukka5/weavec0  (Stage 0 bootstrap SDK)
+Dependency:  https://github.com/ahojukka5/weavec1  (Stage 1 compiler SDK)
+Downstream:  https://github.com/ahojukka5/weavec   (self-hosted compiler)
