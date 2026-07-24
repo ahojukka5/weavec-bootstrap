@@ -1,9 +1,9 @@
 ; SPDX-License-Identifier: Apache-2.0
 ; main.wir
 ;
-; CLI entry point for weavefront.
+; CLI entry point for weavec-bootstrap.
 ;
-; Usage: weavefront <input.weave> <output.wir>
+; Usage: weavec-bootstrap <input.weave> <output.wir>
 
 (core-module
   (core-version 1)
@@ -23,16 +23,16 @@
       (params)
       (returns void)
       (do
-        (let msg ptr (const_string_ptr "Usage: weavefront <input.weave> <output.wir>\n"))
-        (call_i64 write (const_i32 2) (local_get msg) (const_i64 45))
+        (let msg ptr (const_string_ptr "Usage: weavec-bootstrap <input.weave> <output.wir>\n"))
+        (call_i64 write (const_i32 2) (local_get msg) (const_i64 51))
         (return_void)))
 
     (fn print_error
       (params (error_code i32))
       (returns void)
       (do
-        (let msg ptr (const_string_ptr "weavefront: compilation failed\n"))
-        (call_i64 write (const_i32 2) (local_get msg) (const_i64 31))
+        (let msg ptr (const_string_ptr "weavec-bootstrap: compilation failed\n"))
+        (call_i64 write (const_i32 2) (local_get msg) (const_i64 37))
         (return_void)))
 
     ; =============================================================================
