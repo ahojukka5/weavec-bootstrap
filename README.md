@@ -5,9 +5,8 @@
 > A deterministic surface-Weave-to-WIR frontend used to bootstrap the
 > self-hosted `weavec` compiler.
 
-This repository was previously named `weavefront`. The new name makes its role
-explicit: it is part of the bootstrap chain, not the final user-facing
-compiler.
+This repository was previously named `weavefront`. It is a bootstrap component,
+not the final user-facing compiler.
 
 ## Role
 
@@ -23,13 +22,14 @@ weavec-bootstrap
    LLVM IR
 ```
 
-`weavec-bootstrap` owns the **surface → WIR** edge. It is written in WIR and
-built with the published `weavec1` SDK. It provides the frontend needed to build
-[`weavec`](https://github.com/ahojukka5/weavec) from surface-Weave source.
+`weavec-bootstrap` owns the **surface → WIR** boundary. It is written in WIR,
+built with the published `weavec1` SDK, and supplies the first frontend capable
+of building [`weavec`](https://github.com/ahojukka5/weavec) from surface-Weave
+source.
 
-The frontend contains a generic S-expression lexer, parser, tree, and printer,
-with deterministic surface validation and lowering layered on top. See
-[`docs/ARCHITECTURE.md`](docs/ARCHITECTURE.md).
+The frontend contains generic S-expression token, tree, lexer, parser, and
+printer modules with deterministic surface validation and lowering layered on
+top. See [`docs/ARCHITECTURE.md`](docs/ARCHITECTURE.md).
 
 ## Compiler chain
 
@@ -37,8 +37,8 @@ with deterministic surface validation and lowering layered on top. See
 |---|---|---|
 | `weavec0` | [`ahojukka5/weavec0`](https://github.com/ahojukka5/weavec0) | Hand-written Stage 0 seed and SDK. |
 | `weavec1` | [`ahojukka5/weavec1`](https://github.com/ahojukka5/weavec1) | WIR compiler and Stage 1 SDK. |
-| `weavec-bootstrap` | **this repository** | Surface-to-WIR bootstrap frontend, formerly `weavefront`. |
-| `weavec` | [`ahojukka5/weavec`](https://github.com/ahojukka5/weavec) | User-facing self-hosted compiler, formerly `weavec2`. |
+| `weavec-bootstrap` | **this repository** | Surface-to-WIR bootstrap frontend. |
+| `weavec` | [`ahojukka5/weavec`](https://github.com/ahojukka5/weavec) | User-facing self-hosted compiler. |
 
 ```text
 weavec0 → weavec1 → weavec-bootstrap → weavec
@@ -84,14 +84,13 @@ cd weavec-bootstrap
 The first Linux build downloads `weavec1 v0.2.0`, verifies the archive against
 `SHA256SUMS`, and caches it under `build/vendor/weavec1-sdk/`.
 
-The current executable retains the historical path `build/weavefront` for
-compatibility. Conceptually it is the `weavec-bootstrap` command:
+Compile a surface program:
 
 ```bash
-./build/weavefront test/01_return_42.weave /tmp/out.wir
+./build/weavec-bootstrap test/01_return_42.weave /tmp/out.wir
 ```
 
-## Stage 1 SDK
+## Stage 1 dependency
 
 ```text
 weavec1-v0.2.0-linux-x86_64-<libc>/
@@ -121,19 +120,39 @@ Environment overrides:
 - `WEAVEC1_TAG=vX.Y.Z` selects the source fallback;
 - `WEAVEC0` and `WEAVEC0_TAG` control Stage 0 only for source fallback.
 
+## Build outputs
+
+`./build.sh` produces three named artifacts:
+
+```text
+build/weavec-bootstrap       surface Weave → WIR executable
+build/weavec-bootstrap.bc    complete frontend LLVM bitcode
+build/libweave-sexpr.bc      reusable tokenizer/tree/lexer/parser library
+```
+
+The parser library combines the generated forms of:
+
+```text
+src/sexpr_tokens.wir
+src/sexpr_tree.wir
+src/sexpr_lexer.wir
+src/sexpr_parser.wir
+```
+
+These sources belong here because they implement the parser used by the
+bootstrap frontend. Downstream stages consume the single named library instead
+of reaching into this repository for four unrelated `.ll` build products.
+
 ## Build pipeline
 
 `./build.sh`:
 
 1. resolves the Stage 1 SDK or source fallback;
 2. compiles the linked `src/*.wir` modules with `weavec1`;
-3. combines the LLVM modules into `build/weavefront.bc`;
-4. links the executable with the matching runtime;
-5. writes `build/toolchain.env` for tests and downstream bootstrap use.
-
-The `build/weavefront*` filenames are compatibility names from the former
-repository identity. New documentation refers to the component as
-`weavec-bootstrap`.
+3. creates `build/libweave-sexpr.bc` from the four reusable parser modules;
+4. combines all frontend modules into `build/weavec-bootstrap.bc`;
+5. links the `build/weavec-bootstrap` executable with the matching runtime;
+6. writes `build/toolchain.env` for tests and downstream bootstrap use.
 
 ## Repository layout
 
@@ -142,51 +161,44 @@ weavec-bootstrap/
 ├── build.sh
 ├── test.sh
 ├── test_all.sh
-├── weavefront-cat.sh          historical multifile script name
-├── src/                       WIR frontend modules
-├── test/                      58 surface fixtures and WIR goldens
+├── weavec-bootstrap-cat.sh   multifile bootstrap driver
+├── src/                      WIR frontend and S-expression modules
+├── test/                     58 surface fixtures and WIR goldens
 ├── docs/ARCHITECTURE.md
-└── build/                     generated frontend and toolchain metadata
+└── build/                    generated artifacts and toolchain metadata
 ```
 
 ## Tests
 
 `./test_all.sh` runs every surface fixture through:
 
-1. surface Weave → WIR with the bootstrap frontend;
+1. surface Weave → WIR with `weavec-bootstrap`;
 2. byte-for-byte comparison with the WIR golden;
 3. WIR → LLVM IR with the resolved `weavec1` compiler;
 4. native linking with the resolved runtime;
 5. execution and exit-code verification.
 
-CI covers:
-
-- Linux x86-64 glibc SDK;
-- Linux x86-64 musl SDK;
-- macOS source fallback.
-
+CI covers Linux x86-64 glibc, Linux x86-64 musl, and the macOS source fallback.
 `./test.sh` runs the smallest `return 42` smoke case.
 
 ## Multifile bootstrap path
 
-The historical `weavefront-cat.sh` script combines multiple `(program ...)`
-files and invokes the frontend once:
+`weavec-bootstrap-cat.sh` combines multiple `(program ...)` files and invokes
+the frontend once:
 
 ```bash
-./weavefront-cat.sh combined.wir foo.weave bar.weave baz.weave
+./weavec-bootstrap-cat.sh combined.wir foo.weave bar.weave baz.weave
 ```
 
-`weavec` currently uses this path to lower its own source tree during the first
-bootstrap generation.
+`weavec` uses this path to lower its own source tree during the first bootstrap
+generation.
 
 ## Known limitations
 
 - Surface Weave intentionally stays close to WIR.
 - Output is compact and byte-stable rather than source-formatted.
 - Diagnostics use byte offsets rather than full source ranges.
-- Published SDKs currently cover Linux x86-64 only.
-- Executable and helper filenames still contain the historical `weavefront`
-  name for compatibility.
+- Published dependency SDKs currently cover Linux x86-64 only.
 
 ## License
 
