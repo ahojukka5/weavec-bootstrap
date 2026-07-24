@@ -47,6 +47,12 @@ jobs:
               text = text.replace("weavefront", "weavec-bootstrap")
               path.write_text(text)
 
+          main = Path("src/main.wir")
+          text = main.read_text()
+          text = text.replace("(const_i64 45)", "(const_i64 51)", 1)
+          text = text.replace("(const_i64 31)", "(const_i64 37)", 1)
+          main.write_text(text)
+
           build = Path("build.sh")
           text = build.read_text()
           text = text.replace(
@@ -54,21 +60,21 @@ jobs:
               'TOOLCHAIN_ENV="$BUILD_DIR/toolchain.env"\n'
               'SEXPR_LIBRARY="$BUILD_DIR/libweave-sexpr.bc"\n',
           )
-          anchor = '''link_and_compile() {
-'''
-          function = '''build_sexpr_library() {
-  log "linking reusable S-expression parser library"
-  llvm-link \\
-    "$BUILD_DIR/sexpr_tokens.ll" \\
-    "$BUILD_DIR/sexpr_tree.ll" \\
-    "$BUILD_DIR/sexpr_lexer.ll" \\
-    "$BUILD_DIR/sexpr_parser.ll" \\
-    -o "$SEXPR_LIBRARY" \\
-    || fail "failed to link $SEXPR_LIBRARY"
-  [[ -s "$SEXPR_LIBRARY" ]] || fail "empty S-expression parser library"
-}
-
-'''
+          anchor = "link_and_compile() {\n"
+          function = "\n".join((
+              "build_sexpr_library() {",
+              '  log "linking reusable S-expression parser library"',
+              "  llvm-link \\",
+              '    "$BUILD_DIR/sexpr_tokens.ll" \\',
+              '    "$BUILD_DIR/sexpr_tree.ll" \\',
+              '    "$BUILD_DIR/sexpr_lexer.ll" \\',
+              '    "$BUILD_DIR/sexpr_parser.ll" \\',
+              '    -o "$SEXPR_LIBRARY" \\',
+              '    || fail "failed to link $SEXPR_LIBRARY"',
+              '  [[ -s "$SEXPR_LIBRARY" ]] || fail "empty S-expression parser library"',
+              "}",
+              "",
+          )) + "\n"
           if function not in text:
               text = text.replace(anchor, function + anchor, 1)
           text = text.replace(
@@ -170,5 +176,3 @@ jobs:
           git add -A
           git commit -m "refactor: use canonical bootstrap names and parser library"
           git push origin HEAD:refactor/canonical-paths
-
-# retrigger
