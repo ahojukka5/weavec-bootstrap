@@ -3,39 +3,29 @@
 set -euo pipefail
 
 # =============================================================================
-# weavefront — surface Weave (.weave) to WIR (.wir) frontend build
+# weavec-bootstrap — surface Weave (.weave) to WIR (.wir) bootstrap frontend
 # =============================================================================
 #
 # Linux x86-64 builds consume the published weavec1 SDK by default. The SDK
-# contains the Stage 1 compiler and the matching static Weave runtime library,
-# so neither weavec0 nor weavec1 needs to be built from source.
+# contains the Stage 1 compiler and matching static Weave runtime library, so
+# neither weavec0 nor weavec1 needs to be built from source.
 #
 # Environment overrides:
 #
 #   WEAVEC1_SDK=/path/to/extracted/sdk
-#       Use an already extracted weavec1 SDK.
-#
 #   WEAVEC1_VERSION=v0.2.0
-#       Select the published weavec1 SDK release.
-#
 #   WEAVEC1_LIBC=glibc|musl
-#       Select the Linux SDK and linker. Default: glibc.
-#
 #   WEAVEC1=/path/to/weavec1/source
-#       Use a pre-built weavec1 source tree instead of an SDK.
-#
 #   WEAVEC1_TAG=v0.2.0
-#       Source fallback tag for platforms without a published SDK.
-#
 #   WEAVEC0=/path/to/weavec0/source
 #   WEAVEC0_TAG=v0.2.1
-#       Stage 0 source fallback used only when building weavec1 from source.
 # =============================================================================
 
-WEAVEFRONT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
-BUILD_DIR="$WEAVEFRONT_DIR/build"
+WEAVEC_BOOTSTRAP_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+BUILD_DIR="$WEAVEC_BOOTSTRAP_DIR/build"
 VENDOR_DIR="$BUILD_DIR/vendor"
 TOOLCHAIN_ENV="$BUILD_DIR/toolchain.env"
+SEXPR_LIBRARY="$BUILD_DIR/libweave-sexpr.bc"
 
 WEAVEC1_VERSION="${WEAVEC1_VERSION:-v0.2.0}"
 WEAVEC1_TAG="${WEAVEC1_TAG:-$WEAVEC1_VERSION}"
@@ -66,8 +56,8 @@ MODULES=(
   main
 )
 
-log()  { printf '[weavefront] %s\n' "$*" >&2; }
-fail() { printf '[weavefront] error: %s\n' "$*" >&2; exit 1; }
+log()  { printf '[weavec-bootstrap] %s\n' "$*" >&2; }
+fail() { printf '[weavec-bootstrap] error: %s\n' "$*" >&2; exit 1; }
 require_tool() {
   command -v "$1" >/dev/null 2>&1 || fail "required tool not found: $1"
 }
@@ -213,7 +203,7 @@ write_toolchain_env() {
 
 compile_modules() {
   mkdir -p "$BUILD_DIR"
-  log "compiling weavefront modules"
+  log "compiling weavec-bootstrap modules"
   local module
   for module in "${MODULES[@]}"; do
     local src="src/${module}.wir"
@@ -224,28 +214,40 @@ compile_modules() {
   done
 }
 
-link_with_sdk() {
-  local object="$BUILD_DIR/weavefront.o"
-  clang -Wno-override-module -O2 -c "$BUILD_DIR/weavefront.bc" -o "$object"
+build_sexpr_library() {
+  log "linking reusable S-expression parser library"
+  llvm-link \
+    "$BUILD_DIR/sexpr_tokens.ll" \
+    "$BUILD_DIR/sexpr_tree.ll" \
+    "$BUILD_DIR/sexpr_lexer.ll" \
+    "$BUILD_DIR/sexpr_parser.ll" \
+    -o "$SEXPR_LIBRARY" \
+    || fail "failed to link $SEXPR_LIBRARY"
+  [[ -s "$SEXPR_LIBRARY" ]] || fail "empty S-expression parser library"
+}
 
-  log "linking static weavefront executable ($WEAVEC1_LIBC)"
+link_with_sdk() {
+  local object="$BUILD_DIR/weavec-bootstrap.o"
+  clang -Wno-override-module -O2 -c "$BUILD_DIR/weavec-bootstrap.bc" -o "$object"
+
+  log "linking static weavec-bootstrap executable ($WEAVEC1_LIBC)"
   case "$WEAVEC1_LIBC" in
     glibc)
       clang -static "$object" "$RUNTIME_LIBRARY" \
-        -o "$BUILD_DIR/weavefront"
+        -o "$BUILD_DIR/weavec-bootstrap"
       ;;
     musl)
       require_tool musl-gcc
       musl-gcc -static "$object" "$RUNTIME_LIBRARY" \
-        -o "$BUILD_DIR/weavefront"
+        -o "$BUILD_DIR/weavec-bootstrap"
       ;;
   esac
 }
 
 link_with_source() {
-  log "linking weavefront with source runtime fallback"
-  clang "$BUILD_DIR/weavefront.bc" "$RUNTIME_C" \
-    -o "$BUILD_DIR/weavefront"
+  log "linking weavec-bootstrap with source runtime fallback"
+  clang "$BUILD_DIR/weavec-bootstrap.bc" "$RUNTIME_C" \
+    -o "$BUILD_DIR/weavec-bootstrap"
 }
 
 link_and_compile() {
@@ -255,8 +257,8 @@ link_and_compile() {
     link_args+=("$BUILD_DIR/${module}.ll")
   done
 
-  log "linking LLVM modules"
-  llvm-link "${link_args[@]}" -o "$BUILD_DIR/weavefront.bc" \
+  log "linking frontend LLVM modules"
+  llvm-link "${link_args[@]}" -o "$BUILD_DIR/weavec-bootstrap.bc" \
     || fail "llvm-link failed"
 
   case "$DEPENDENCY_MODE" in
@@ -267,7 +269,7 @@ link_and_compile() {
 }
 
 main() {
-  cd "$WEAVEFRONT_DIR"
+  cd "$WEAVEC_BOOTSTRAP_DIR"
   require_tool awk
   require_tool clang
   require_tool llvm-as
@@ -275,8 +277,10 @@ main() {
   ensure_dependencies
   write_toolchain_env
   compile_modules
+  build_sexpr_library
   link_and_compile
-  log "build complete: $BUILD_DIR/weavefront"
+  log "build complete: $BUILD_DIR/weavec-bootstrap"
+  log "parser library: $SEXPR_LIBRARY"
 }
 
 main "$@"

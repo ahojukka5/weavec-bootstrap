@@ -1,19 +1,19 @@
 #!/usr/bin/env bash
 # SPDX-License-Identifier: Apache-2.0
-# weavefront-cat.sh — concatenate multiple .weave files into one and compile.
+# weavec-bootstrap-cat.sh — combine multiple .weave programs and lower to WIR.
 #
-# Usage: weavefront-cat.sh <output.wir> <file1.weave> [file2.weave ...]
+# Usage: weavec-bootstrap-cat.sh <output.wir> <file1.weave> [file2.weave ...]
 #
 # Each file must be a well-formed surface Weave program:
 #   (program (name "...") (version "...") <decls...>)
 #
-# The script strips the outer (program ...) wrapper from every file,
-# then emits a single combined program for weavefront to compile.
+# The script strips each outer (program ...) wrapper, removes name/version
+# metadata, emits one combined program, and invokes weavec-bootstrap once.
 
 set -euo pipefail
 
 if [[ $# -lt 2 ]]; then
-  echo "Usage: weavefront-cat.sh <output.wir> <file1.weave> [file2.weave ...]" >&2
+  echo "Usage: weavec-bootstrap-cat.sh <output.wir> <file1.weave> [file2.weave ...]" >&2
   exit 1
 fi
 
@@ -21,14 +21,14 @@ OUTPUT="$1"
 shift
 FILES=("$@")
 
-WEAVEFRONT="${WEAVEFRONT:-$(dirname "$0")/build/weavefront}"
+WEAVEC_BOOTSTRAP="${WEAVEC_BOOTSTRAP:-$(dirname "$0")/build/weavec-bootstrap}"
 
-if [[ ! -x "$WEAVEFRONT" ]]; then
-  echo "weavefront-cat: weavefront not found at $WEAVEFRONT (run ./build.sh first)" >&2
+if [[ ! -x "$WEAVEC_BOOTSTRAP" ]]; then
+  echo "weavec-bootstrap-cat: compiler not found at $WEAVEC_BOOTSTRAP (run ./build.sh first)" >&2
   exit 1
 fi
 
-TMP=$(mktemp /tmp/wfcat.XXXXXX)
+TMP=$(mktemp /tmp/weavec-bootstrap-cat.XXXXXX)
 trap 'rm -f "$TMP"' EXIT
 
 {
@@ -39,19 +39,17 @@ trap 'rm -f "$TMP"' EXIT
   for f in "${FILES[@]}"; do
     python3 - "$f" <<'PYEOF'
 # Extract declarations from a surface Weave file.
-# Strips: outer (program ...) wrapper, (name ...), (version ...) metadata.
-# Uses paren counting to find the boundary of the outer form.
-import sys, re
+# Strips the outer (program ...) wrapper and name/version metadata.
+import re
+import sys
 
 with open(sys.argv[1]) as fh:
     text = fh.read()
 
-# Find the opening (program token
 m = re.search(r'\(program\b', text)
 if not m:
-    sys.exit(0)  # no program form, nothing to extract
+    sys.exit(0)
 
-# Walk forward from '(' counting depth; collect inner text
 pos = m.start()
 depth = 0
 inner_start = None
@@ -71,14 +69,13 @@ while i < len(text):
     elif c == '(':
         depth += 1
         if depth == 1:
-            inner_start = i + 1  # character after opening '('
+            inner_start = i + 1
     elif c == ')':
         depth -= 1
         if depth == 0:
-            inner_end = i  # position of closing ')'
+            inner_end = i
             break
-    elif c == ';' and not in_string:
-        # skip line comment
+    elif c == ';':
         while i < len(text) and text[i] != '\n':
             i += 1
         continue
@@ -88,18 +85,12 @@ if inner_start is None or inner_end is None:
     sys.exit(0)
 
 inner = text[inner_start:inner_end]
-
-# Remove "program" keyword at start (it's the first token)
 inner = re.sub(r'^\s*program\b', '', inner)
 
-# Remove metadata: (name "...") and (version "...") top-level forms
-# We do this with a simple state machine to handle quoted strings.
-skip_re = re.compile(r'\s*\(\s*(name|version)\s')
 result = []
 i = 0
 while i < len(inner):
     if re.match(r'\s*\(\s*(name|version)\s', inner[i:]):
-        # skip this form by counting parens
         while i < len(inner) and inner[i] != '(':
             i += 1
         d = 0
@@ -107,8 +98,11 @@ while i < len(inner):
         while i < len(inner):
             c = inner[i]
             if in_s:
-                if c == '\\': i += 2; continue
-                if c == '"': in_s = False
+                if c == '\\':
+                    i += 2
+                    continue
+                if c == '"':
+                    in_s = False
             elif c == '"':
                 in_s = True
             elif c == '(':
@@ -130,4 +124,4 @@ PYEOF
   echo ")"
 } > "$TMP"
 
-exec "$WEAVEFRONT" "$TMP" "$OUTPUT"
+exec "$WEAVEC_BOOTSTRAP" "$TMP" "$OUTPUT"

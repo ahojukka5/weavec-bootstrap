@@ -2,14 +2,14 @@
 # SPDX-License-Identifier: Apache-2.0
 set -euo pipefail
 
-# Single-test smoke for weavefront. Run ./build.sh first so that
+# Single-test smoke for weavec-bootstrap. Run ./build.sh first so that
 # build/toolchain.env describes the selected compiler and runtime.
 
-WEAVEFRONT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
-BUILD_DIR="$WEAVEFRONT_DIR/build"
+WEAVEC_BOOTSTRAP_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+BUILD_DIR="$WEAVEC_BOOTSTRAP_DIR/build"
 TOOLCHAIN_ENV="$BUILD_DIR/toolchain.env"
 
-cd "$WEAVEFRONT_DIR"
+cd "$WEAVEC_BOOTSTRAP_DIR"
 
 [[ -f "$TOOLCHAIN_ENV" ]] || {
   echo "toolchain metadata missing: $TOOLCHAIN_ENV (run ./build.sh first)" >&2
@@ -18,7 +18,7 @@ cd "$WEAVEFRONT_DIR"
 # shellcheck disable=SC1090
 source "$TOOLCHAIN_ENV"
 
-WEAVEFRONT="$BUILD_DIR/weavefront"
+WEAVEC_BOOTSTRAP="$BUILD_DIR/weavec-bootstrap"
 WEAVE_RUNTIME_MODE="${WEAVE_RUNTIME_MODE:-source}"
 WEAVE_RUNTIME_LIBRARY="${WEAVE_RUNTIME_LIBRARY:-}"
 WEAVE_RUNTIME_C="${WEAVE_RUNTIME_C:-}"
@@ -33,14 +33,14 @@ fail() {
   exit 1
 }
 
-[[ -x "$WEAVEFRONT" ]] || fail "weavefront not found (run ./build.sh first)"
+[[ -x "$WEAVEC_BOOTSTRAP" ]] || fail "weavec-bootstrap not found (run ./build.sh first)"
 [[ -x "$WEAVEC1_BIN" ]] || fail "weavec1 not found: $WEAVEC1_BIN"
 
 log "Test 01: return_42"
 log "  Compiling Surface Weave to WIR..."
 rm -f "$BUILD_DIR/01_return_42.wir"
-"$WEAVEFRONT" test/01_return_42.weave "$BUILD_DIR/01_return_42.wir" \
-  || fail "weavefront compilation failed"
+"$WEAVEC_BOOTSTRAP" test/01_return_42.weave "$BUILD_DIR/01_return_42.wir" \
+  || fail "weavec-bootstrap compilation failed"
 
 log "  Comparing WIR output..."
 diff test/01_return_42.expected.wir "$BUILD_DIR/01_return_42.wir" \

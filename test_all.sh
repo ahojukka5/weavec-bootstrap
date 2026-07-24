@@ -2,22 +2,22 @@
 # SPDX-License-Identifier: Apache-2.0
 set -euo pipefail
 
-# weavefront test ladder. Run ./build.sh first; it records the resolved Stage 1
-# compiler and runtime in build/toolchain.env for this script.
+# weavec-bootstrap test ladder. Run ./build.sh first; it records the resolved
+# Stage 1 compiler and runtime in build/toolchain.env for this script.
 
-WEAVEFRONT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
-BUILD_DIR="$WEAVEFRONT_DIR/build"
+WEAVEC_BOOTSTRAP_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+BUILD_DIR="$WEAVEC_BOOTSTRAP_DIR/build"
 VENDOR_DIR="$BUILD_DIR/vendor"
 TOOLCHAIN_ENV="$BUILD_DIR/toolchain.env"
 
-cd "$WEAVEFRONT_DIR"
+cd "$WEAVEC_BOOTSTRAP_DIR"
 
 if [[ -f "$TOOLCHAIN_ENV" ]]; then
   # shellcheck disable=SC1090
   source "$TOOLCHAIN_ENV"
 fi
 
-WEAVEFRONT="$BUILD_DIR/weavefront"
+WEAVEC_BOOTSTRAP="$BUILD_DIR/weavec-bootstrap"
 WEAVEC1_DIR="${WEAVEC1:-$VENDOR_DIR/weavec1-source}"
 WEAVEC0_DIR="${WEAVEC0:-$VENDOR_DIR/weavec0-source}"
 WEAVEC1_BIN="${WEAVEC1_BIN:-$WEAVEC1_DIR/build/weavec1}"
@@ -38,8 +38,8 @@ fail() {
   FAIL_COUNT=$((FAIL_COUNT + 1))
 }
 
-[[ -x "$WEAVEFRONT" ]] || {
-  echo "weavefront not found at $WEAVEFRONT (run ./build.sh first)" >&2
+[[ -x "$WEAVEC_BOOTSTRAP" ]] || {
+  echo "weavec-bootstrap not found at $WEAVEC_BOOTSTRAP (run ./build.sh first)" >&2
   exit 1
 }
 [[ -x "$WEAVEC1_BIN" ]] || {
@@ -173,8 +173,8 @@ for weave_file in test/*.weave; do
   log "Testing (wir): $test_name"
 
   rm -f "$wir_file"
-  if ! "$WEAVEFRONT" "$weave_file" "$wir_file" 2>/dev/null; then
-    fail "$test_name: weavefront compilation failed"
+  if ! "$WEAVEC_BOOTSTRAP" "$weave_file" "$wir_file" 2>/dev/null; then
+    fail "$test_name: weavec-bootstrap compilation failed"
     continue
   fi
   chmod u+r "$wir_file" 2>/dev/null || true
@@ -203,8 +203,8 @@ for weave_file in test/*.weave; do
 
   if [[ ! -f "$wir_file" ]]; then
     rm -f "$wir_file"
-    if ! "$WEAVEFRONT" "$weave_file" "$wir_file" 2>/dev/null; then
-      fail "$test_name: weavefront compilation failed"
+    if ! "$WEAVEC_BOOTSTRAP" "$weave_file" "$wir_file" 2>/dev/null; then
+      fail "$test_name: weavec-bootstrap compilation failed"
       continue
     fi
     chmod u+r "$wir_file" 2>/dev/null || true

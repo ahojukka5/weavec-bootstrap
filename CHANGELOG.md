@@ -11,8 +11,16 @@ named `weavefront` through release `v0.1.0`. The format follows
 
 - Renamed the repository from `weavefront` to `weavec-bootstrap` to distinguish
   the bootstrap frontend from the final `weavec` compiler.
-- Updated documentation, links, notices, and compiler-chain terminology to use
-  `weavec0 → weavec1 → weavec-bootstrap → weavec`.
+- Renamed the executable from `build/weavefront` to
+  `build/weavec-bootstrap`.
+- Renamed the multifile driver from `weavefront-cat.sh` to
+  `weavec-bootstrap-cat.sh`.
+- Linked the reusable `sexpr_tokens`, `sexpr_tree`, `sexpr_lexer`, and
+  `sexpr_parser` modules into one named `build/libweave-sexpr.bc` library for
+  downstream bootstrap consumers.
+- Removed the historical compatibility paths; current files, environment
+  variables, diagnostics, tests, and documentation use canonical component
+  names.
 - Linux x86-64 builds consume the published `weavec1 v0.2.0` SDK instead of
   cloning and rebuilding `weavec0` and `weavec1`.
 - Stage 1 SDK downloads are verified against release `SHA256SUMS` and cached
@@ -25,17 +33,14 @@ named `weavefront` through release `v0.1.0`. The format follows
 - CI validates Linux glibc SDK, Linux musl SDK, and macOS source-fallback
   builds.
 
-### Compatibility
-
-- The executable path `build/weavefront` and helper `weavefront-cat.sh` retain
-  their historical names until downstream bootstrap scripts migrate.
-
 ### Fixed
 
 - End-to-end tests no longer depend on a checked-out `runtime.c` in SDK mode;
   they link with the packaged `libweave-runtime.a`.
 - Architecture documentation no longer claims `string_utils.wir` is linked or
   used by active lowering modules.
+- The bootstrap CLI diagnostics and their explicit WIR byte lengths now use the
+  canonical `weavec-bootstrap` command name.
 
 ## [0.1.0] — 2026-05-27
 
@@ -60,8 +65,8 @@ The first public release, published under the repository name `weavefront`.
 ### Removed
 
 - Unpaired multifile fixtures that had no expected WIR files and aborted the
-  ladder. Multifile compilation remains supported through the historical
-  `weavefront-cat.sh` helper.
+  ladder. Multifile compilation remained supported in that release through the
+  then-named `weavefront-cat.sh` helper.
 
 ### Known limitations
 
