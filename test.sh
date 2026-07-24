@@ -2,22 +2,27 @@
 # SPDX-License-Identifier: Apache-2.0
 set -euo pipefail
 
-# Single-test smoke for weavefront. Useful when iterating on the
-# front-end alone — the full ladder is in test_all.sh.
-#
-# Requires ./build.sh to have run first. WEAVEC0 / WEAVEC1 env vars
-# select which dependency copies to test against (same conventions
-# as build.sh / test_all.sh).
+# Single-test smoke for weavefront. Run ./build.sh first so that
+# build/toolchain.env describes the selected compiler and runtime.
 
 WEAVEFRONT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 BUILD_DIR="$WEAVEFRONT_DIR/build"
-VENDOR_DIR="$BUILD_DIR/vendor"
+TOOLCHAIN_ENV="$BUILD_DIR/toolchain.env"
+
+cd "$WEAVEFRONT_DIR"
+
+[[ -f "$TOOLCHAIN_ENV" ]] || {
+  echo "toolchain metadata missing: $TOOLCHAIN_ENV (run ./build.sh first)" >&2
+  exit 1
+}
+# shellcheck disable=SC1090
+source "$TOOLCHAIN_ENV"
 
 WEAVEFRONT="$BUILD_DIR/weavefront"
-WEAVEC0_DIR="${WEAVEC0:-$VENDOR_DIR/weavec0}"
-WEAVEC1_DIR="${WEAVEC1:-$VENDOR_DIR/weavec1}"
-WEAVEC1_BIN="$WEAVEC1_DIR/build/weavec1"
-RUNTIME="$WEAVEC0_DIR/runtime.c"
+WEAVE_RUNTIME_MODE="${WEAVE_RUNTIME_MODE:-source}"
+WEAVE_RUNTIME_LIBRARY="${WEAVE_RUNTIME_LIBRARY:-}"
+WEAVE_RUNTIME_C="${WEAVE_RUNTIME_C:-}"
+WEAVE_RUNTIME_LIBC="${WEAVE_RUNTIME_LIBC:-glibc}"
 
 log() {
   echo "[test] $*"
@@ -28,33 +33,59 @@ fail() {
   exit 1
 }
 
-[[ -x "$WEAVEFRONT" ]] || fail "weavefront not found at $WEAVEFRONT (run ./build.sh first)"
-[[ -x "$WEAVEC1_BIN" ]] || fail "weavec1 not found at $WEAVEC1_BIN (run ./build.sh first or set WEAVEC1)"
-[[ -f "$RUNTIME" ]] || fail "runtime not found at $RUNTIME (run ./build.sh first or set WEAVEC0)"
+[[ -x "$WEAVEFRONT" ]] || fail "weavefront not found (run ./build.sh first)"
+[[ -x "$WEAVEC1_BIN" ]] || fail "weavec1 not found: $WEAVEC1_BIN"
 
-# Test 01: return_42
 log "Test 01: return_42"
 log "  Compiling Surface Weave to WIR..."
-rm -f "$BUILD_DIR/01_return_42.wir"  # Remove old output
-$WEAVEFRONT test/01_return_42.weave "$BUILD_DIR/01_return_42.wir" || fail "weavefront compilation failed"
+rm -f "$BUILD_DIR/01_return_42.wir"
+"$WEAVEFRONT" test/01_return_42.weave "$BUILD_DIR/01_return_42.wir" \
+  || fail "weavefront compilation failed"
 
 log "  Comparing WIR output..."
-if ! diff test/01_return_42.expected.wir "$BUILD_DIR/01_return_42.wir"; then
-  fail "WIR output mismatch"
-fi
+diff test/01_return_42.expected.wir "$BUILD_DIR/01_return_42.wir" \
+  || fail "WIR output mismatch"
 
 log "  Compiling WIR to LLVM IR..."
-"$WEAVEC1_BIN" "$BUILD_DIR/01_return_42.wir" "$BUILD_DIR/01_return_42.ll" || fail "weavec1 compilation failed"
+"$WEAVEC1_BIN" "$BUILD_DIR/01_return_42.wir" \
+  "$BUILD_DIR/01_return_42.ll" || fail "weavec1 compilation failed"
 
 log "  Validating LLVM IR..."
-llvm-as "$BUILD_DIR/01_return_42.ll" -o "$BUILD_DIR/01_return_42.bc" || fail "LLVM validation failed"
+llvm-as "$BUILD_DIR/01_return_42.ll" -o "$BUILD_DIR/01_return_42.bc" \
+  || fail "LLVM validation failed"
 
 log "  Compiling to executable..."
-clang "$BUILD_DIR/01_return_42.ll" "$RUNTIME" -o "$BUILD_DIR/01_return_42" || fail "clang compilation failed"
+case "$WEAVE_RUNTIME_MODE" in
+  sdk)
+    clang -Wno-override-module -O2 -c "$BUILD_DIR/01_return_42.ll" \
+      -o "$BUILD_DIR/01_return_42.o"
+    case "$WEAVE_RUNTIME_LIBC" in
+      glibc)
+        clang -static "$BUILD_DIR/01_return_42.o" "$WEAVE_RUNTIME_LIBRARY" \
+          -o "$BUILD_DIR/01_return_42"
+        ;;
+      musl)
+        command -v musl-gcc >/dev/null 2>&1 \
+          || fail "musl-gcc is required for the musl SDK"
+        musl-gcc -static "$BUILD_DIR/01_return_42.o" \
+          "$WEAVE_RUNTIME_LIBRARY" -o "$BUILD_DIR/01_return_42"
+        ;;
+      *) fail "unknown SDK libc: $WEAVE_RUNTIME_LIBC" ;;
+    esac
+    ;;
+  source)
+    [[ -f "$WEAVE_RUNTIME_C" ]] || fail "runtime source not found"
+    clang "$BUILD_DIR/01_return_42.ll" "$WEAVE_RUNTIME_C" \
+      -o "$BUILD_DIR/01_return_42"
+    ;;
+  *) fail "unknown runtime mode: $WEAVE_RUNTIME_MODE" ;;
+esac
 
 log "  Running executable..."
+set +e
 "$BUILD_DIR/01_return_42"
 EXIT_CODE=$?
+set -e
 if [[ $EXIT_CODE != 42 ]]; then
   fail "Expected exit code 42, got $EXIT_CODE"
 fi

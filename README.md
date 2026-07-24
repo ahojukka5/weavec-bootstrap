@@ -2,241 +2,216 @@
 
 [![ci](https://github.com/ahojukka5/weavefront/actions/workflows/ci.yml/badge.svg)](https://github.com/ahojukka5/weavefront/actions/workflows/ci.yml)
 
-> The surface-language frontend for the Weave compiler chain.
-> Converts `.weave` source files into stable WIR (`.wir`) for
-> [`weavec1`](https://github.com/ahojukka5/weavec1) / `weavec2` to
-> compile to LLVM IR. weavefront itself is written in WIR and
-> compiled by `weavec1`.
+> The surface-language frontend for the Weave compiler chain. It converts
+> `.weave` source files into stable WIR (`.wir`) for `weavec1` or `weavec2`.
 
 ## Overview
 
-The Weave compiler chain is split into separate stages that each do
-one thing:
+The compiler chain is split into small, independently buildable stages:
 
+```text
+.weave ──[ weavefront ]──> .wir ──[ weavec1 / weavec2 ]──> .ll
+       ──[ clang ]──> executable
 ```
-.weave  ──[ weavefront ]──>  .wir  ──[ weavec1 / weavec2 ]──>  .ll  ──[ clang ]──>  exe
-```
 
-`weavefront` owns the **surface → WIR** edge. It is intentionally
-thin: surface Weave is a small wrapper around WIR that adds module
-packaging (`(program …)`, `(name …)`, `(version …)`), an entry-point
-form (`(entry …)`), and a struct-declaration form
-(`(struct Name (field …))`). Function bodies use the same low-level
-WIR operations as direct `.wir` code.
+`weavefront` owns the **surface → WIR** edge. It is written in WIR and built
+with the published `weavec1` SDK. Surface Weave adds program packaging,
+entry-point declarations, structs, constants, and validation around the stable
+low-level WIR operations used in function bodies.
 
-The compiler is built on a generic S-expression layer (lexer, parser,
-tree, pretty-printer) with the surface-language phases
-(validate, lower, struct-lower) running on top. See
-[`docs/ARCHITECTURE.md`](docs/ARCHITECTURE.md) for the module map and
-design philosophy.
-
----
+The frontend is built on a generic S-expression lexer, parser, tree, and
+printer. Surface validation and lowering run on top of that layer. See
+[`docs/ARCHITECTURE.md`](docs/ARCHITECTURE.md) for the module map.
 
 ## Prerequisites
 
-`weavefront` builds with a standard LLVM toolchain plus `git`:
+Linux x86-64 builds download a versioned `weavec1` SDK. They do not clone or
+build `weavec0` or `weavec1` from source.
 
-- `clang`, `llvm-as`, `llvm-link` — LLVM 14 or newer (opaque pointers).
-- `git` — to fetch the pinned `weavec0` and `weavec1` dependencies on
-  first build.
-- `bash` 4 or newer.
+Required tools:
 
-Installation hints:
+- Bash 4 or newer
+- LLVM 14 or newer: `clang`, `llvm-as`, and `llvm-link`
+- `curl`, `tar`, and `sha256sum` for SDK acquisition
+- `musl-gcc` only when building against the musl SDK
 
-```sh
-# Debian / Ubuntu
-sudo apt-get install -y llvm clang git
+Ubuntu installation:
 
-# macOS (Homebrew)
+```bash
+sudo apt-get install -y llvm clang curl musl-tools
+```
+
+macOS currently uses the source fallback because no macOS SDK is published:
+
+```bash
 brew install llvm git
 export PATH="$(brew --prefix llvm)/bin:$PATH"
 ```
 
-CI runs on `ubuntu-latest` and `macos-latest` against the
-package-manager LLVMs.
-
----
-
 ## Quick start
 
-```sh
+```bash
 git clone https://github.com/ahojukka5/weavefront.git
 cd weavefront
 ./build.sh
 ./test_all.sh
 ```
 
-**Note**: the first `./build.sh` is slower than subsequent runs — it
-also clones and builds the pinned `weavec0` and `weavec1` tags into
-`build/vendor/`. Re-runs reuse the cached vendor copies.
+On Linux, the first build downloads `weavec1 v0.2.0`, verifies its archive
+against the release `SHA256SUMS`, and extracts it under
+`build/vendor/weavec1-sdk/`. Later builds reuse the cached SDK.
 
-Compile a tiny `.weave` source by hand:
+Compile a small surface program:
 
-```sh
-cat test/01_return_42.weave
+```bash
 ./build/weavefront test/01_return_42.weave /tmp/out.wir
 cat /tmp/out.wir
 ```
 
----
+## Published Stage 1 SDK
+
+The default Linux dependency is:
+
+```text
+weavec1-v0.2.0-linux-x86_64-<libc>/
+├── bin/weavec1
+├── lib/libweave-runtime.a
+├── include/runtime.h
+└── SDK-MANIFEST
+```
+
+`build.sh` records the selected compiler and runtime in
+`build/toolchain.env`. Both `test.sh` and `test_all.sh` read that file instead
+of reconstructing vendor paths independently.
+
+### Select glibc or musl
+
+```bash
+WEAVEC1_LIBC=glibc ./build.sh
+WEAVEC1_LIBC=musl ./build.sh
+```
+
+Both variants produce a statically linked `build/weavefront` executable.
+
+### Environment overrides
+
+- `WEAVEC1_SDK=/path/to/sdk` uses an already extracted SDK.
+- `WEAVEC1_VERSION=vX.Y.Z` selects a published release.
+- `WEAVEC1_LIBC=glibc|musl` selects the archive and linker.
+- `WEAVEC1_RELEASE_BASE=<url>` overrides the GitHub Release base URL.
+- `WEAVEC1=/path/to/source` forces a pre-built source tree.
+- `WEAVEC1_TAG=vX.Y.Z` selects the source fallback tag.
+- `WEAVEC0=/path/to/source` and `WEAVEC0_TAG=vX.Y.Z` control the Stage 0
+  source fallback used on platforms without an SDK.
+
+Explicit `WEAVEC1_SDK` and `WEAVEC1` values take precedence over automatic
+platform selection.
+
+## Build pipeline
+
+`./build.sh` performs these steps:
+
+1. Resolve the Stage 1 dependency.
+   - Linux x86-64: download and verify the published SDK.
+   - Other platforms: build the pinned source tags.
+2. Compile every WIR module under `src/` with `bin/weavec1`.
+3. Link the generated LLVM modules into `build/weavefront.bc`.
+4. Link the final executable.
+   - SDK mode: use the matching static `libweave-runtime.a`.
+   - Source mode: use the Stage 0 runtime source fallback.
+5. Write `build/toolchain.env` for the test commands.
 
 ## Repository layout
 
 ```text
 weavefront/
-  build.sh                    # build driver (fetches weavec0 + weavec1, compiles)
-  test.sh                     # single-test smoke (01_return_42)
-  test_all.sh                 # full ladder
-  weavefront-cat.sh           # concatenate multiple .weave files into one
-  src/                        # WIR source modules (~3.5k lines, 10 modules)
-    sexpr_*.wir               # generic S-expression infra
-    surface_*.wir             # surface-language phases
-    driver.wir / main.wir     # pipeline glue + CLI
-    string_utils.wir          # extern wrappers (not yet linked in)
-  test/                       # 58 .weave + 58 .expected.wir pairs
-  docs/
-    ARCHITECTURE.md           # design notes / module map
-  build/                      # build outputs (gitignored)
-    vendor/{weavec0,weavec1}  # auto-fetched dependencies
+├── build.sh
+├── test.sh
+├── test_all.sh
+├── weavefront-cat.sh
+├── src/
+│   ├── sexpr_*.wir
+│   ├── surface_*.wir
+│   ├── driver.wir
+│   └── main.wir
+├── test/
+├── docs/
+│   └── ARCHITECTURE.md
+└── build/
+    ├── toolchain.env
+    ├── vendor/weavec1-sdk/
+    ├── downloads/
+    └── weavefront
 ```
-
----
-
-## Build
-
-```sh
-./build.sh                    # full build
-```
-
-Environment overrides:
-
-- `WEAVEC0=/path/to/weavec0` — point at an existing weavec0 source
-  tree (where `./build.sh` has already produced `weavec0` and
-  `build/bootstrap-tests/bc/`). Skips the vendor fetch entirely.
-- `WEAVEC1=/path/to/weavec1` — same idea for weavec1.
-- `WEAVEC0_TAG=vX.Y.Z` — change the pinned weavec0 tag (default
-  `v0.2.0`). Delete `build/vendor/weavec0/` to force a refetch.
-- `WEAVEC1_TAG=vX.Y.Z` — same idea for weavec1 (default `v0.1.0`).
-
-The script:
-
-1. **Resolves weavec0** — via `WEAVEC0` env or git-clone of
-   `https://github.com/ahojukka5/weavec0` at `WEAVEC0_TAG` into
-   `build/vendor/weavec0/`. Builds it if not already built. We
-   need it for `runtime.c` (malloc / free / puts / file I/O).
-2. **Resolves weavec1** — via `WEAVEC1` env or git-clone of
-   `https://github.com/ahojukka5/weavec1` at `WEAVEC1_TAG` into
-   `build/vendor/weavec1/`. Invokes weavec1's own `build.sh`
-   with `WEAVEC0=$WEAVEC0_DIR` so the weavec0 dependency is built
-   once, not twice.
-3. **Compiles weavefront** — every WIR module under `src/` is
-   compiled by `weavec1` to LLVM IR.
-4. **Links** the modules with `llvm-link` and `clang` against
-   weavec0's `runtime.c`, producing `build/weavefront`.
-
----
 
 ## Test ladder
 
-`test_all.sh` walks `test/*.weave` and runs each fixture through the
-full pipeline:
+`./test_all.sh` walks every `test/*.weave` fixture through the full pipeline:
 
-1. `weavefront <name>.weave <name>.wir` — surface → WIR.
-2. Diff the produced WIR against the checked-in `<name>.expected.wir`
-   golden — byte-equal required.
-3. `weavec1 <name>.wir <name>.ll` — WIR → LLVM IR.
-4. `clang <name>.ll runtime.c -o <name>` — link.
-5. Run `<name>`; assert the exit code matches the declared value.
+1. Surface Weave → WIR with `weavefront`.
+2. Compare the WIR byte-for-byte with the checked-in golden.
+3. WIR → LLVM IR with the resolved `weavec1` compiler.
+4. Link with the resolved runtime and libc toolchain.
+5. Run the executable and verify its exit code.
 
-58 cases ship in `test/`. A passing run ends with
-`<N> passed, 0 failed`.
+The CI matrix runs the complete ladder with:
 
-`test.sh` runs only `01_return_42` and is useful when iterating on
-the front-end alone.
+- Linux x86-64 glibc SDK
+- Linux x86-64 musl SDK
+- macOS source fallback
 
----
+`./test.sh` runs only the smallest `return 42` smoke case.
 
 ## Examples
 
-Every file under [`test/`](test) is a runnable end-to-end example.
-Suggested entry points if you are reading the code for the first
-time:
+Every file under [`test/`](test) is an end-to-end example. Useful starting
+points include:
 
-- [`test/01_return_42.weave`](test/01_return_42.weave) — the
-  smallest possible surface program.
-- [`test/08_if.weave`](test/08_if.weave) — branching.
-- [`test/09_while.weave`](test/09_while.weave) — loops and mutable
-  locals.
+- [`test/01_return_42.weave`](test/01_return_42.weave)
+- [`test/08_if.weave`](test/08_if.weave)
+- [`test/09_while.weave`](test/09_while.weave)
 - [`test/17_extern_malloc_free.weave`](test/17_extern_malloc_free.weave)
-  — declaring and calling C externs.
-- [`test/57_struct_basic.weave`](test/57_struct_basic.weave) —
-  struct declarations and their lowered getter / setter accessors.
+- [`test/57_struct_basic.weave`](test/57_struct_basic.weave)
 - [`test/52_integration_nested_control_flow.weave`](test/52_integration_nested_control_flow.weave)
-  — multi-feature integration test.
-
----
-
-## Where weavefront fits in the chain
-
-The Weave compiler chain is split across separate repositories:
-
-| Stage | Repo | Role |
-|-------|------|------|
-| `weavec0` | [`ahojukka5/weavec0`](https://github.com/ahojukka5/weavec0) | Hand-written LLVM-IR seed compiler. Compiles WIR → LLVM. Tiny, frozen. |
-| `weavec1` | [`ahojukka5/weavec1`](https://github.com/ahojukka5/weavec1) | WIR-written compiler. Compiled by `weavec0`. Same WIR → LLVM contract, self-hosted. |
-| `weavefront` | **this repo** | Surface (`.weave`) → WIR (`.wir`) frontend. Written in WIR, compiled by `weavec1`. |
-| `weavec2` | TBD | Surface-Weave compiler that goes straight to WIR / LLVM. Will replace this frontend + weavec1 chain for surface inputs. |
-
-Once `weavec2` is stable, this frontend will mostly freeze: surface
-inputs will go directly through `weavec2`.
-
----
 
 ## Multifile compilation
 
-`weavefront-cat.sh` concatenates several `.weave` files into a single
-combined surface program before invoking `weavefront`. It is the
-multifile workflow `weavec2`'s own build uses:
+`weavefront-cat.sh` combines multiple `(program ...)` files and invokes the
+frontend once:
 
-```sh
+```bash
 ./weavefront-cat.sh combined.wir foo.weave bar.weave baz.weave
 ```
 
-Each input must be a well-formed `(program …)`; the script strips the
-outer wrappers and re-emits a single combined program.
+This is the bootstrap path used by `weavec2`.
 
----
+## Compiler chain
+
+| Stage | Repository | Role |
+|---|---|---|
+| `weavec0` | [`ahojukka5/weavec0`](https://github.com/ahojukka5/weavec0) | Hand-written LLVM-IR seed compiler and runtime SDK. |
+| `weavec1` | [`ahojukka5/weavec1`](https://github.com/ahojukka5/weavec1) | WIR-written compiler and published Stage 1 SDK. |
+| `weavefront` | **this repository** | Surface Weave → WIR frontend. |
+| `weavec2` | [`ahojukka5/weavec2`](https://github.com/ahojukka5/weavec2) | Self-hosted surface compiler. |
+
+Once `weavec2` fully replaces the split frontend/backend path, `weavefront`
+and `weavec1` can mostly freeze as bootstrap stages.
 
 ## Known limitations
 
-These are intentional scope choices, not bugs:
-
-- **Surface stays close to WIR.** There is no type inference, no
-  macros, no pattern matching, no module system. Function bodies
-  use the same low-level WIR operations as direct `.wir` code.
-- **Single-line output.** The pretty-printer emits compact,
-  byte-stable WIR. Downstream compilers don't care; tooling that
-  consumes `.wir` may want to add its own indentation.
-- **Byte-offset diagnostics.** Errors refer to byte positions in the
-  source, not line / column. Acceptable for the v0.x phase.
-- **`src/string_utils.wir` is currently unused.** It declares
-  `strlen` / `strncmp` / `memchr` extern wrappers but no module
-  links against it. Intentionally not in `build.sh`'s `MODULES`
-  list; revisit when a module needs it.
-- **The vendored dependency caches** at `build/vendor/weavec0/`
-  and `build/vendor/weavec1/` are not auto-updated when
-  `WEAVEC0_TAG` / `WEAVEC1_TAG` change. Delete the directories
-  and re-run `./build.sh` to refetch.
-
----
+- Surface Weave intentionally stays close to WIR.
+- The pretty-printer emits compact, byte-stable single-line WIR.
+- Diagnostics use byte offsets rather than full line and column ranges.
+- `src/string_utils.wir` remains outside the linked module list until another
+  module consumes its wrappers.
+- Published SDKs currently cover Linux x86-64 only; macOS uses source builds.
 
 ## License
 
-Licensed under the Apache License, Version 2.0. See
-[`LICENSE`](LICENSE) and [`NOTICE`](NOTICE).
+Licensed under the Apache License, Version 2.0. See [`LICENSE`](LICENSE) and
+[`NOTICE`](NOTICE).
 
 ## Contributing
 
-Pull requests and issues are welcome. The merge bar is intentionally
-narrow — please read [`CONTRIBUTING.md`](CONTRIBUTING.md) and the
-**Known limitations** section above before opening a PR.
+Read [`CONTRIBUTING.md`](CONTRIBUTING.md) and the known limitations before
+opening a pull request.
