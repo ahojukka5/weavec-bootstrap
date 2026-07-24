@@ -2,21 +2,29 @@
 # SPDX-License-Identifier: Apache-2.0
 set -euo pipefail
 
-# weavefront test ladder.
-#
-# Requires ./build.sh to have run first (it lays down build/vendor/
-# unless WEAVEC0 / WEAVEC1 are pointed elsewhere). The same env vars
-# pick which weavec0 / weavec1 to test against here.
+# weavefront test ladder. Run ./build.sh first; it records the resolved Stage 1
+# compiler and runtime in build/toolchain.env for this script.
 
 WEAVEFRONT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 BUILD_DIR="$WEAVEFRONT_DIR/build"
 VENDOR_DIR="$BUILD_DIR/vendor"
+TOOLCHAIN_ENV="$BUILD_DIR/toolchain.env"
+
+cd "$WEAVEFRONT_DIR"
+
+if [[ -f "$TOOLCHAIN_ENV" ]]; then
+  # shellcheck disable=SC1090
+  source "$TOOLCHAIN_ENV"
+fi
 
 WEAVEFRONT="$BUILD_DIR/weavefront"
-WEAVEC0_DIR="${WEAVEC0:-$VENDOR_DIR/weavec0}"
-WEAVEC1_DIR="${WEAVEC1:-$VENDOR_DIR/weavec1}"
-WEAVEC1_BIN="$WEAVEC1_DIR/build/weavec1"
-RUNTIME="$WEAVEC0_DIR/runtime.c"
+WEAVEC1_DIR="${WEAVEC1:-$VENDOR_DIR/weavec1-source}"
+WEAVEC0_DIR="${WEAVEC0:-$VENDOR_DIR/weavec0-source}"
+WEAVEC1_BIN="${WEAVEC1_BIN:-$WEAVEC1_DIR/build/weavec1}"
+WEAVE_RUNTIME_MODE="${WEAVE_RUNTIME_MODE:-source}"
+WEAVE_RUNTIME_LIBRARY="${WEAVE_RUNTIME_LIBRARY:-}"
+WEAVE_RUNTIME_C="${WEAVE_RUNTIME_C:-$WEAVEC0_DIR/runtime.c}"
+WEAVE_RUNTIME_LIBC="${WEAVE_RUNTIME_LIBC:-glibc}"
 
 PASS_COUNT=0
 FAIL_COUNT=0
@@ -30,14 +38,43 @@ fail() {
   FAIL_COUNT=$((FAIL_COUNT + 1))
 }
 
-[[ -x "$WEAVEFRONT" ]] || { echo "weavefront not found at $WEAVEFRONT (run ./build.sh first)" >&2; exit 1; }
-[[ -x "$WEAVEC1_BIN" ]] || { echo "weavec1 not found at $WEAVEC1_BIN (run ./build.sh first or set WEAVEC1)" >&2; exit 1; }
-[[ -f "$RUNTIME" ]] || { echo "runtime not found at $RUNTIME (run ./build.sh first or set WEAVEC0)" >&2; exit 1; }
+[[ -x "$WEAVEFRONT" ]] || {
+  echo "weavefront not found at $WEAVEFRONT (run ./build.sh first)" >&2
+  exit 1
+}
+[[ -x "$WEAVEC1_BIN" ]] || {
+  echo "weavec1 not found at $WEAVEC1_BIN (run ./build.sh first)" >&2
+  exit 1
+}
 
-# Create build directory
-mkdir -p "$BUILD_DIR/test_wir" "$BUILD_DIR/test_ll" "$BUILD_DIR/test_bin"
+case "$WEAVE_RUNTIME_MODE" in
+  sdk)
+    [[ -s "$WEAVE_RUNTIME_LIBRARY" ]] || {
+      echo "runtime library not found: $WEAVE_RUNTIME_LIBRARY" >&2
+      exit 1
+    }
+    if [[ "$WEAVE_RUNTIME_LIBC" == musl ]]; then
+      command -v musl-gcc >/dev/null 2>&1 || {
+        echo "musl-gcc is required for the musl SDK tests" >&2
+        exit 1
+      }
+    fi
+    ;;
+  source)
+    [[ -f "$WEAVE_RUNTIME_C" ]] || {
+      echo "runtime source not found: $WEAVE_RUNTIME_C" >&2
+      exit 1
+    }
+    ;;
+  *)
+    echo "unknown runtime mode: $WEAVE_RUNTIME_MODE" >&2
+    exit 1
+    ;;
+esac
 
-# Expected exit code for each test name
+mkdir -p "$BUILD_DIR/test_wir" "$BUILD_DIR/test_ll" \
+  "$BUILD_DIR/test_obj" "$BUILD_DIR/test_bin"
+
 get_expected_exit() {
   case "$1" in
     01_return_42)                        echo 42  ;;
@@ -102,7 +139,32 @@ get_expected_exit() {
   esac
 }
 
-# WIR-comparison tests: compile .weave and diff against .expected.wir
+link_test_executable() {
+  local ll_file="$1"
+  local object_file="$2"
+  local bin_file="$3"
+
+  case "$WEAVE_RUNTIME_MODE" in
+    sdk)
+      clang -Wno-override-module -O2 -c "$ll_file" -o "$object_file"
+      case "$WEAVE_RUNTIME_LIBC" in
+        glibc)
+          clang -static "$object_file" "$WEAVE_RUNTIME_LIBRARY" \
+            -o "$bin_file"
+          ;;
+        musl)
+          musl-gcc -static "$object_file" "$WEAVE_RUNTIME_LIBRARY" \
+            -o "$bin_file"
+          ;;
+        *) return 1 ;;
+      esac
+      ;;
+    source)
+      clang "$ll_file" "$WEAVE_RUNTIME_C" -o "$bin_file"
+      ;;
+  esac
+}
+
 for weave_file in test/*.weave; do
   test_name=$(basename "$weave_file" .weave)
   expected_wir="test/${test_name}.expected.wir"
@@ -111,7 +173,7 @@ for weave_file in test/*.weave; do
   log "Testing (wir): $test_name"
 
   rm -f "$wir_file"
-  if ! $WEAVEFRONT "$weave_file" "$wir_file" 2>/dev/null; then
+  if ! "$WEAVEFRONT" "$weave_file" "$wir_file" 2>/dev/null; then
     fail "$test_name: weavefront compilation failed"
     continue
   fi
@@ -130,38 +192,36 @@ for weave_file in test/*.weave; do
   PASS_COUNT=$((PASS_COUNT + 1))
 done
 
-# End-to-end run tests: compile .wir through weavec1, link, and run
 for weave_file in test/*.weave; do
   test_name=$(basename "$weave_file" .weave)
   wir_file="$BUILD_DIR/test_wir/${test_name}.wir"
   ll_file="$BUILD_DIR/test_ll/${test_name}.ll"
+  object_file="$BUILD_DIR/test_obj/${test_name}.o"
   bin_file="$BUILD_DIR/test_bin/${test_name}"
 
   log "Testing (e2e): $test_name"
 
-  # Step 1: Compile .weave to .wir (reuse from wir pass if present)
   if [[ ! -f "$wir_file" ]]; then
     rm -f "$wir_file"
-    if ! $WEAVEFRONT "$weave_file" "$wir_file" 2>/dev/null; then
+    if ! "$WEAVEFRONT" "$weave_file" "$wir_file" 2>/dev/null; then
       fail "$test_name: weavefront compilation failed"
       continue
     fi
     chmod u+r "$wir_file" 2>/dev/null || true
   fi
 
-  # Step 2: Compile .wir to .ll
-  if ! "$WEAVEC1_BIN" "$wir_file" "$ll_file" 2>&1 | grep -q "compilation succeeded"; then
+  if ! "$WEAVEC1_BIN" "$wir_file" "$ll_file" 2>&1 | \
+      grep -q "compilation succeeded"; then
     fail "$test_name: weavec1 compilation failed"
     continue
   fi
 
-  # Step 3: Compile to executable
-  if ! clang "$ll_file" "$RUNTIME" -o "$bin_file" 2>/dev/null; then
-    fail "$test_name: clang compilation failed"
+  if ! link_test_executable "$ll_file" "$object_file" "$bin_file" \
+      2>/dev/null; then
+    fail "$test_name: executable link failed"
     continue
   fi
 
-  # Step 4: Run and check exit code
   set +e
   "$bin_file"
   actual_exit=$?
