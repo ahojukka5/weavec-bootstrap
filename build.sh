@@ -3,68 +3,56 @@
 set -euo pipefail
 
 # =============================================================================
-# weavefront — surface Weave (.weave) → WIR (.wir) frontend, build script
+# weavefront — surface Weave (.weave) to WIR (.wir) frontend build
 # =============================================================================
 #
-# Pipeline:
+# Linux x86-64 builds consume the published weavec1 SDK by default. The SDK
+# contains the Stage 1 compiler and the matching static Weave runtime library,
+# so neither weavec0 nor weavec1 needs to be built from source.
 #
-#   1. Acquire weavec0 (Stage 0 seed compiler, hand-written LLVM IR).
-#      Honour the WEAVEC0 env var (path to a pre-built source tree),
-#      or clone the pinned $WEAVEC0_TAG from upstream into
-#      build/vendor/weavec0. We need weavec0 for its runtime.c
-#      (malloc / free / puts / file I/O).
+# Environment overrides:
 #
-#   2. Acquire weavec1 (Stage 1 compiler, WIR-written). Honour WEAVEC1,
-#      or clone $WEAVEC1_TAG into build/vendor/weavec1. weavec1's own
-#      build.sh is invoked with WEAVEC0 pointing at the source tree
-#      from step 1, so we don't fetch / build weavec0 twice.
+#   WEAVEC1_SDK=/path/to/extracted/sdk
+#       Use an already extracted weavec1 SDK.
 #
-#   3. Compile every weavefront WIR module under src/ with weavec1 →
-#      LLVM IR.
+#   WEAVEC1_VERSION=v0.2.0
+#       Select the published weavec1 SDK release.
 #
-#   4. Link the modules with weavec0's runtime.c to produce the
-#      weavefront binary.
+#   WEAVEC1_LIBC=glibc|musl
+#       Select the Linux SDK and linker. Default: glibc.
 #
-# Environment:
+#   WEAVEC1=/path/to/weavec1/source
+#       Use a pre-built weavec1 source tree instead of an SDK.
 #
-#   WEAVEC0
-#       Absolute path to an existing weavec0 source tree where
-#       ./build.sh has already been run. Skips the vendor fetch and
-#       reuses the binary + runtime.c in place.
+#   WEAVEC1_TAG=v0.2.0
+#       Source fallback tag for platforms without a published SDK.
 #
-#   WEAVEC0_TAG  (default: v0.2.0)
-#       Git tag/ref pulled from github.com/ahojukka5/weavec0 when no
-#       WEAVEC0 is provided.
-#
-#   WEAVEC1
-#       Absolute path to an existing weavec1 source tree where
-#       ./build.sh has already been run. Skips the vendor fetch and
-#       reuses build/weavec1 in place.
-#
-#   WEAVEC1_TAG  (default: v0.1.0)
-#       Git tag/ref pulled from github.com/ahojukka5/weavec1 when no
-#       WEAVEC1 is provided.
+#   WEAVEC0=/path/to/weavec0/source
+#   WEAVEC0_TAG=v0.2.1
+#       Stage 0 source fallback used only when building weavec1 from source.
 # =============================================================================
 
 WEAVEFRONT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
-SRC_DIR="$WEAVEFRONT_DIR/src"
 BUILD_DIR="$WEAVEFRONT_DIR/build"
 VENDOR_DIR="$BUILD_DIR/vendor"
+TOOLCHAIN_ENV="$BUILD_DIR/toolchain.env"
 
-WEAVEC0_TAG="${WEAVEC0_TAG:-v0.2.0}"
-WEAVEC0_REPO="https://github.com/ahojukka5/weavec0.git"
-
-WEAVEC1_TAG="${WEAVEC1_TAG:-v0.1.0}"
+WEAVEC1_VERSION="${WEAVEC1_VERSION:-v0.2.0}"
+WEAVEC1_TAG="${WEAVEC1_TAG:-$WEAVEC1_VERSION}"
+WEAVEC1_LIBC="${WEAVEC1_LIBC:-glibc}"
+WEAVEC1_RELEASE_BASE="${WEAVEC1_RELEASE_BASE:-https://github.com/ahojukka5/weavec1/releases/download}"
 WEAVEC1_REPO="https://github.com/ahojukka5/weavec1.git"
 
-WEAVEC0_DIR=""        # populated by ensure_weavec0
-WEAVEC1_DIR=""        # populated by ensure_weavec1
-WEAVEC1_BIN=""        # path to the weavec1 executable
-RUNTIME_C=""          # path to weavec0/runtime.c
+WEAVEC0_TAG="${WEAVEC0_TAG:-v0.2.1}"
+WEAVEC0_REPO="https://github.com/ahojukka5/weavec0.git"
 
-# Module compile order. string_utils.wir is intentionally not in this
-# list — it defines extern wrappers nothing currently consumes; revisit
-# when a module actually links against it.
+DEPENDENCY_MODE=""
+WEAVEC0_DIR=""
+WEAVEC1_DIR=""
+WEAVEC1_BIN=""
+RUNTIME_LIBRARY=""
+RUNTIME_C=""
+
 MODULES=(
   sexpr_tokens
   sexpr_tree
@@ -80,59 +68,147 @@ MODULES=(
 
 log()  { printf '[weavefront] %s\n' "$*" >&2; }
 fail() { printf '[weavefront] error: %s\n' "$*" >&2; exit 1; }
-require_tool() { command -v "$1" >/dev/null 2>&1 || fail "required tool not found: $1"; }
+require_tool() {
+  command -v "$1" >/dev/null 2>&1 || fail "required tool not found: $1"
+}
 
-ensure_weavec0() {
+host_has_published_sdk() {
+  [[ "$(uname -s)" == Linux && "$(uname -m)" == x86_64 ]]
+}
+
+validate_sdk() {
+  local sdk="$1"
+  [[ -x "$sdk/bin/weavec1" ]] || \
+    fail "SDK compiler missing: $sdk/bin/weavec1"
+  [[ -s "$sdk/lib/libweave-runtime.a" ]] || \
+    fail "SDK runtime library missing: $sdk/lib/libweave-runtime.a"
+
+  WEAVEC1_BIN="$sdk/bin/weavec1"
+  RUNTIME_LIBRARY="$sdk/lib/libweave-runtime.a"
+  DEPENDENCY_MODE=sdk
+}
+
+download_weavec1_sdk() {
+  require_tool curl
+  require_tool sha256sum
+  require_tool tar
+
+  case "$WEAVEC1_LIBC" in
+    glibc|musl) ;;
+    *) fail "WEAVEC1_LIBC must be glibc or musl" ;;
+  esac
+
+  local package="weavec1-${WEAVEC1_VERSION}-linux-x86_64-${WEAVEC1_LIBC}"
+  local archive="$package.tar.gz"
+  local vendor_root="$VENDOR_DIR/weavec1-sdk"
+  local sdk="$vendor_root/$package"
+  local cache="$BUILD_DIR/downloads"
+  local archive_path="$cache/$archive"
+  local sums_path="$cache/weavec1-${WEAVEC1_VERSION}-SHA256SUMS"
+  local release_url="$WEAVEC1_RELEASE_BASE/$WEAVEC1_VERSION"
+
+  if [[ -d "$sdk" ]]; then
+    log "using cached weavec1 SDK: $sdk"
+    validate_sdk "$sdk"
+    return
+  fi
+
+  mkdir -p "$cache" "$vendor_root"
+  log "downloading weavec1 SDK $WEAVEC1_VERSION ($WEAVEC1_LIBC)"
+  curl --fail --location --retry 3 --output "$archive_path" \
+    "$release_url/$archive"
+  curl --fail --location --retry 3 --output "$sums_path" \
+    "$release_url/SHA256SUMS"
+
+  local expected
+  expected="$(awk -v name="$archive" '$2 == name { print $1; exit }' \
+    "$sums_path")"
+  [[ -n "$expected" ]] || fail "checksum not found for $archive"
+  printf '%s  %s\n' "$expected" "$archive_path" | sha256sum --check -
+
+  rm -rf "$sdk"
+  tar -C "$vendor_root" -xzf "$archive_path"
+  validate_sdk "$sdk"
+}
+
+ensure_weavec0_source() {
+  require_tool git
+
   if [[ -n "${WEAVEC0:-}" ]]; then
     WEAVEC0_DIR="$WEAVEC0"
-    log "using WEAVEC0 from env: $WEAVEC0_DIR"
+    log "using WEAVEC0 source tree: $WEAVEC0_DIR"
   else
-    WEAVEC0_DIR="$VENDOR_DIR/weavec0"
+    WEAVEC0_DIR="$VENDOR_DIR/weavec0-source"
     if [[ ! -d "$WEAVEC0_DIR/.git" ]]; then
-      log "fetching weavec0 $WEAVEC0_TAG from $WEAVEC0_REPO"
+      log "fetching weavec0 source fallback $WEAVEC0_TAG"
       mkdir -p "$(dirname "$WEAVEC0_DIR")"
-      git clone --depth 1 --branch "$WEAVEC0_TAG" "$WEAVEC0_REPO" "$WEAVEC0_DIR"
+      git clone --depth 1 --branch "$WEAVEC0_TAG" "$WEAVEC0_REPO" \
+        "$WEAVEC0_DIR"
     fi
   fi
 
-  [[ -d "$WEAVEC0_DIR" ]] || fail "weavec0 source dir not found: $WEAVEC0_DIR"
-  [[ -x "$WEAVEC0_DIR/build.sh" ]] || fail "weavec0 build.sh not found at $WEAVEC0_DIR/build.sh"
-
-  if [[ ! -x "$WEAVEC0_DIR/weavec0" ]] || [[ ! -d "$WEAVEC0_DIR/build/bootstrap-tests/bc" ]]; then
-    log "building weavec0 ($WEAVEC0_DIR)"
-    ( cd "$WEAVEC0_DIR" && ./build.sh ) || fail "weavec0 build failed"
+  [[ -x "$WEAVEC0_DIR/build.sh" ]] || \
+    fail "weavec0 build.sh missing: $WEAVEC0_DIR/build.sh"
+  if [[ ! -x "$WEAVEC0_DIR/weavec0" ]]; then
+    log "building weavec0 source fallback"
+    (cd "$WEAVEC0_DIR" && ./build.sh)
   fi
 
   RUNTIME_C="$WEAVEC0_DIR/runtime.c"
-  [[ -f "$RUNTIME_C" ]] || fail "weavec0 runtime.c not found at $RUNTIME_C"
+  [[ -f "$RUNTIME_C" ]] || fail "weavec0 runtime.c missing: $RUNTIME_C"
 }
 
-ensure_weavec1() {
+ensure_weavec1_source() {
+  ensure_weavec0_source
+
   if [[ -n "${WEAVEC1:-}" ]]; then
     WEAVEC1_DIR="$WEAVEC1"
-    log "using WEAVEC1 from env: $WEAVEC1_DIR"
+    log "using WEAVEC1 source tree: $WEAVEC1_DIR"
   else
-    WEAVEC1_DIR="$VENDOR_DIR/weavec1"
+    WEAVEC1_DIR="$VENDOR_DIR/weavec1-source"
     if [[ ! -d "$WEAVEC1_DIR/.git" ]]; then
-      log "fetching weavec1 $WEAVEC1_TAG from $WEAVEC1_REPO"
+      log "fetching weavec1 source fallback $WEAVEC1_TAG"
       mkdir -p "$(dirname "$WEAVEC1_DIR")"
-      git clone --depth 1 --branch "$WEAVEC1_TAG" "$WEAVEC1_REPO" "$WEAVEC1_DIR"
+      git clone --depth 1 --branch "$WEAVEC1_TAG" "$WEAVEC1_REPO" \
+        "$WEAVEC1_DIR"
     fi
   fi
 
-  [[ -d "$WEAVEC1_DIR" ]] || fail "weavec1 source dir not found: $WEAVEC1_DIR"
-  [[ -x "$WEAVEC1_DIR/build.sh" ]] || fail "weavec1 build.sh not found at $WEAVEC1_DIR/build.sh"
+  [[ -x "$WEAVEC1_DIR/build.sh" ]] || \
+    fail "weavec1 build.sh missing: $WEAVEC1_DIR/build.sh"
 
   WEAVEC1_BIN="$WEAVEC1_DIR/build/weavec1"
   if [[ ! -x "$WEAVEC1_BIN" ]]; then
-    log "building weavec1 ($WEAVEC1_DIR)"
-    # weavec1's own build.sh honours WEAVEC0 — point it at the source
-    # tree we already prepared so it doesn't fetch / build weavec0
-    # a second time.
-    ( cd "$WEAVEC1_DIR" && WEAVEC0="$WEAVEC0_DIR" ./build.sh ) \
-      || fail "weavec1 build failed"
+    log "building weavec1 source fallback"
+    (cd "$WEAVEC1_DIR" && WEAVEC0="$WEAVEC0_DIR" ./build.sh)
   fi
-  [[ -x "$WEAVEC1_BIN" ]] || fail "weavec1 binary not built at $WEAVEC1_BIN"
+  [[ -x "$WEAVEC1_BIN" ]] || fail "weavec1 compiler was not built"
+  DEPENDENCY_MODE=source
+}
+
+ensure_dependencies() {
+  if [[ -n "${WEAVEC1_SDK:-}" ]]; then
+    log "using WEAVEC1_SDK: $WEAVEC1_SDK"
+    validate_sdk "$WEAVEC1_SDK"
+  elif [[ -n "${WEAVEC1:-}" ]]; then
+    ensure_weavec1_source
+  elif host_has_published_sdk; then
+    download_weavec1_sdk
+  else
+    log "no published SDK for $(uname -s)/$(uname -m); using source fallback"
+    ensure_weavec1_source
+  fi
+}
+
+write_toolchain_env() {
+  mkdir -p "$BUILD_DIR"
+  {
+    printf 'WEAVEC1_BIN=%q\n' "$WEAVEC1_BIN"
+    printf 'WEAVE_RUNTIME_MODE=%q\n' "$DEPENDENCY_MODE"
+    printf 'WEAVE_RUNTIME_LIBRARY=%q\n' "$RUNTIME_LIBRARY"
+    printf 'WEAVE_RUNTIME_C=%q\n' "$RUNTIME_C"
+    printf 'WEAVE_RUNTIME_LIBC=%q\n' "$WEAVEC1_LIBC"
+  } > "$TOOLCHAIN_ENV"
 }
 
 compile_modules() {
@@ -140,12 +216,36 @@ compile_modules() {
   log "compiling weavefront modules"
   local module
   for module in "${MODULES[@]}"; do
-    local src="$SRC_DIR/${module}.wir"
+    local src="src/${module}.wir"
     local ll="$BUILD_DIR/${module}.ll"
     [[ -f "$src" ]] || fail "missing source module: $src"
     "$WEAVEC1_BIN" "$src" "$ll" || fail "failed to compile ${module}.wir"
     [[ -s "$ll" ]] || fail "weavec1 produced empty LLVM IR for ${module}"
   done
+}
+
+link_with_sdk() {
+  local object="$BUILD_DIR/weavefront.o"
+  clang -Wno-override-module -O2 -c "$BUILD_DIR/weavefront.bc" -o "$object"
+
+  log "linking static weavefront executable ($WEAVEC1_LIBC)"
+  case "$WEAVEC1_LIBC" in
+    glibc)
+      clang -static "$object" "$RUNTIME_LIBRARY" \
+        -o "$BUILD_DIR/weavefront"
+      ;;
+    musl)
+      require_tool musl-gcc
+      musl-gcc -static "$object" "$RUNTIME_LIBRARY" \
+        -o "$BUILD_DIR/weavefront"
+      ;;
+  esac
+}
+
+link_with_source() {
+  log "linking weavefront with source runtime fallback"
+  clang "$BUILD_DIR/weavefront.bc" "$RUNTIME_C" \
+    -o "$BUILD_DIR/weavefront"
 }
 
 link_and_compile() {
@@ -159,18 +259,21 @@ link_and_compile() {
   llvm-link "${link_args[@]}" -o "$BUILD_DIR/weavefront.bc" \
     || fail "llvm-link failed"
 
-  log "compiling to executable"
-  clang "$BUILD_DIR/weavefront.bc" "$RUNTIME_C" -o "$BUILD_DIR/weavefront" \
-    || fail "clang link failed"
+  case "$DEPENDENCY_MODE" in
+    sdk) link_with_sdk ;;
+    source) link_with_source ;;
+    *) fail "unknown dependency mode: $DEPENDENCY_MODE" ;;
+  esac
 }
 
 main() {
+  cd "$WEAVEFRONT_DIR"
+  require_tool awk
   require_tool clang
   require_tool llvm-as
   require_tool llvm-link
-  require_tool git
-  ensure_weavec0
-  ensure_weavec1
+  ensure_dependencies
+  write_toolchain_env
   compile_modules
   link_and_compile
   log "build complete: $BUILD_DIR/weavefront"
