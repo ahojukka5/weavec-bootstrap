@@ -2,9 +2,7 @@
 
 `weavec-bootstrap` is the deterministic surface-Weave-to-WIR frontend used to
 bootstrap the self-hosted [`weavec`](https://github.com/ahojukka5/weavec)
-compiler. The repository was formerly named `weavefront`.
-
-It is written in WIR and built with the published `weavec1` SDK on Linux.
+compiler. It is written in WIR and built with the published `weavec1` SDK.
 
 ## Principles
 
@@ -14,22 +12,20 @@ It is written in WIR and built with the published `weavec1` SDK on Linux.
   byte-identical `.wir` output across runs and platforms.
 - **No feature without an end-to-end fixture.** Add a matching
   `test/NN_<name>.weave` and `test/NN_<name>.expected.wir` pair.
-- **Keep the surface close to WIR.** Avoid type inference, macro expansion,
+- **Keep the surface close to WIR.** Avoid inference, macro expansion,
   optimisation, or hidden control-flow transformations.
-- **Keep toolchain documentation synchronized.** Build, test, README, and
-  architecture changes must agree on SDK paths and runtime linkage.
-- **Prefer changes in `weavec`.** New user-facing language development belongs
-  in the final compiler unless the bootstrap frontend must learn the form to
-  build that compiler.
+- **Keep binary boundaries named.** Downstream stages consume
+  `build/libweave-sexpr.bc`, never individual generated parser `.ll` files.
+- **Prefer changes in `weavec`.** User-facing language development belongs in
+  the final compiler unless this stage must learn the form to bootstrap it.
 
 ## What does not belong here
 
 - New WIR primitives or backend LLVM behavior.
-- General language evolution that is not required for bootstrap.
+- General language evolution not required for bootstrap.
 - High-level systems such as packages, macros, inference, or pattern matching.
-- Runtime externs added only in the frontend. Add the ABI to Stage 0, publish a
-  new Stage 0 SDK, publish the corresponding Stage 1 SDK, and then update
-  `WEAVEC1_VERSION` here.
+- Runtime externs added only in the frontend. Release the ABI through Stage 0
+  and Stage 1 before updating this repository.
 
 ## Development workflow
 
@@ -43,34 +39,21 @@ It is written in WIR and built with the published `weavec1` SDK on Linux.
    ./test_all.sh
    ```
 
-5. Confirm WIR goldens are intentional and end-to-end executables return the
-   expected codes.
-6. Update README, architecture, changelog, and dependency documentation when a
+5. Confirm `build/weavec-bootstrap`, `build/weavec-bootstrap.bc`, and
+   `build/libweave-sexpr.bc` exist.
+6. Review WIR goldens and executable exit codes.
+7. Update README, architecture, changelog, and dependency documentation when a
    public surface or toolchain contract changes.
-7. Open a pull request.
+8. Open a pull request.
 
-CI validates:
-
-- Linux x86-64 with the glibc `weavec1` SDK;
-- Linux x86-64 with the musl `weavec1` SDK;
-- macOS with the source fallback.
+CI validates Linux x86-64 with glibc and musl Stage 1 SDKs plus the macOS source
+fallback.
 
 ## Dependency changes
 
-The normal Linux dependency is selected with:
-
-- `WEAVEC1_VERSION` for the release;
-- `WEAVEC1_LIBC` for glibc or musl;
-- `WEAVEC1_SDK` for an extracted local SDK.
-
-Do not update the version pin before the corresponding Stage 1 release exists
-and its `SHA256SUMS` and archive contents have been verified.
-
-## Historical command names
-
-The build currently retains `build/weavefront` and `weavefront-cat.sh` as
-compatibility paths. Treat `weavec-bootstrap` as the component name in new
-prose, issues, and design documents.
+The normal Linux dependency is selected with `WEAVEC1_VERSION`,
+`WEAVEC1_LIBC`, and optionally `WEAVEC1_SDK`. Do not update the version pin
+before the corresponding Stage 1 release and `SHA256SUMS` exist.
 
 ## Licensing
 
