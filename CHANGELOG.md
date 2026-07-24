@@ -1,25 +1,34 @@
 # Changelog
 
-All notable changes to `weavefront` are recorded here. The format follows
+All notable changes to `weavec-bootstrap` are recorded here. The repository was
+named `weavefront` through release `v0.1.0`. The format follows
 [Keep a Changelog](https://keepachangelog.com/en/1.1.0/). Versioning follows
-[SemVer](https://semver.org/); the surface contract remains pre-1.0.
+[SemVer](https://semver.org/); the bootstrap surface contract remains pre-1.0.
 
 ## [Unreleased]
 
 ### Changed
 
-- Linux x86-64 builds now consume the published `weavec1 v0.2.0` SDK instead
-  of cloning and rebuilding `weavec0` and `weavec1`.
+- Renamed the repository from `weavefront` to `weavec-bootstrap` to distinguish
+  the bootstrap frontend from the final `weavec` compiler.
+- Updated documentation, links, notices, and compiler-chain terminology to use
+  `weavec0 → weavec1 → weavec-bootstrap → weavec`.
+- Linux x86-64 builds consume the published `weavec1 v0.2.0` SDK instead of
+  cloning and rebuilding `weavec0` and `weavec1`.
 - Stage 1 SDK downloads are verified against release `SHA256SUMS` and cached
   under `build/vendor/weavec1-sdk/`.
 - glibc and musl are supported as explicit static build variants.
-- `build.sh` writes `build/toolchain.env` as the single resolved compiler,
-  runtime, linker, and libc contract.
-- `test.sh` and `test_all.sh` now consume that toolchain file rather than
+- `build.sh` writes `build/toolchain.env` as the resolved compiler, runtime,
+  linker, and libc contract.
+- `test.sh` and `test_all.sh` consume that toolchain file rather than
   reconstruct vendor paths.
 - CI validates Linux glibc SDK, Linux musl SDK, and macOS source-fallback
   builds.
-- README and architecture documentation now describe the published SDK path.
+
+### Compatibility
+
+- The executable path `build/weavefront` and helper `weavefront-cat.sh` retain
+  their historical names until downstream bootstrap scripts migrate.
 
 ### Fixed
 
@@ -30,7 +39,7 @@ All notable changes to `weavefront` are recorded here. The format follows
 
 ## [0.1.0] — 2026-05-27
 
-The first public release of `weavefront`.
+The first public release, published under the repository name `weavefront`.
 
 ### Added
 
@@ -51,8 +60,8 @@ The first public release of `weavefront`.
 ### Removed
 
 - Unpaired multifile fixtures that had no expected WIR files and aborted the
-  ladder. Multifile compilation remains supported through
-  `weavefront-cat.sh`.
+  ladder. Multifile compilation remains supported through the historical
+  `weavefront-cat.sh` helper.
 
 ### Known limitations
 
