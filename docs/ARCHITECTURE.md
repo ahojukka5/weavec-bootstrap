@@ -2,76 +2,74 @@
 
 # weavefront architecture
 
-This document describes how `weavefront` is put together. It is aimed
-at contributors and curious readers — if you only want to use the
-compiler, the [top-level README](../README.md) is enough.
+This document describes the internal structure of `weavefront`. The top-level
+[README](../README.md) covers installation and normal use.
 
-## Role in the Weave chain
+## Role in the compiler chain
 
+```text
+.weave source
+      ↓
+  weavefront
+      ↓
+    WIR
+      ↓
+weavec1 or weavec2
+      ↓
+   LLVM IR
 ```
-.weave file  ──[ weavefront ]──>  .wir file  ──[ weavec1 / weavec2 ]──>  .ll  ──[ clang ]──>  exe
-   surface                          stable                                  LLVM IR
-   syntax                          backend
-                                 contract
-```
 
-`weavefront` is the **frontend** of the chain: it converts surface
-Weave (`.weave`) into the stable WIR (`.wir`) the backends consume.
-Everything below WIR is the responsibility of `weavec1` /
-`weavec2`. weavefront itself is **written in WIR** and compiled by
-`weavec1`, the same way `weavec1` is written in WIR and compiled by
-`weavec0`.
+`weavefront` owns the surface-Weave-to-WIR boundary. It is itself written in WIR
+and built with the published `weavec1` SDK on Linux x86-64.
+
+Everything below WIR is a backend responsibility. `weavefront` validates and
+rewrites surface forms but must emit only WIR already admitted by the backend
+contract.
 
 ## Design philosophy
 
-### Generic S-expression layer, semantic phase on top
+### Generic S-expression layer
 
-Both surface Weave and WIR are S-expression languages. Rather than
-hand-rolling WIR-specific parsing logic, weavefront is built around
-a **generic S-expression infrastructure** (`sexpr_*.wir`) that has
-no knowledge of surface Weave or WIR. The surface-language phases
-(`surface_*.wir`) run on top of that generic tree.
+Surface Weave and WIR are both S-expression languages. The `sexpr_*.wir`
+modules implement a generic lexer, parser, tree, and printer that do not know
+the surface language.
 
-This separation lets the generic layer be reused for other
-S-expression dialects and keeps surface-specific churn out of the
-parser.
+The `surface_*.wir` modules run semantic validation and lowering on the generic
+tree. This keeps parser infrastructure reusable and isolates surface-language
+changes from syntax-tree mechanics.
 
 ### Surface stays close to WIR
 
-Surface Weave is **not** a high-level language. It is a thin
-re-wrapping of WIR that adds module packaging, optional struct
-declarations, and a few sugar forms. The body of a function uses
-the same low-level WIR operations as direct WIR code. Implication:
-the lowering pass is mostly a tree rewrite, not a translation.
+Surface Weave adds packaging, entry points, structs, constants, and validation.
+Function bodies retain explicit WIR-style operations. Lowering is therefore
+mostly a deterministic tree rewrite rather than a high-level translation.
 
 ## Pipeline
 
-```
-Surface Weave (.weave)
-   │
-   ▼
-sexpr_lexer.wir        → token stream
-   │
-   ▼
-sexpr_parser.wir       → generic S-expression tree
-   │
-   ▼
-surface_validate.wir   → reject malformed surface programs
-   │
-   ▼
-surface_struct.wir     → lower (struct ...) into getter/setter fns
-surface_lower.wir      → lower (program …) into (core-module …),
-                         (entry …) into (fn …)
-   │
-   ▼
-sexpr_print.wir        → emit WIR text
-   │
-   ▼
-WIR (.wir)
+```text
+Surface Weave
+    ↓
+sexpr_lexer.wir
+    ↓
+sexpr_parser.wir
+    ↓
+surface_validate.wir
+    ↓
+surface_struct.wir
+    ↓
+surface_lower.wir
+    ↓
+sexpr_print.wir
+    ↓
+WIR
 ```
 
-`driver.wir` wires these phases together; `main.wir` is the CLI
-entry point.
+`driver.wir` orchestrates the phases. `main.wir` provides the command-line
+entry point:
+
+```text
+weavefront <input.weave> <output.wir>
+```
 
 ## Module map
 
@@ -79,125 +77,149 @@ entry point.
 
 | Module | Role |
 |---|---|
-| `sexpr_tokens.wir` | Token kind constants (zero-arg fns returning i32: `token_eof`, `token_lparen`, `token_rparen`, `token_ident`, `token_string`, `token_int`). |
-| `sexpr_tree.wir` | Tree node layout (48 bytes; first-child / next-sibling), `tree_new`, `tree_append_node`, accessors. |
-| `sexpr_lexer.wir` | Character-by-character lexer. Skips whitespace and `;` comments, handles `"`-quoted strings with `\\`, `\"`, `\n` escapes, parses signed integers. |
-| `sexpr_parser.wir` | Recursive descent: `sexpr := atom \| list`, `atom := IDENT \| STRING \| INT`, `list := LPAREN sexpr* RPAREN`. Links children via `first_child` / `next_sibling`. |
-| `sexpr_print.wir` | Pretty-printer with a growable buffer. Reads ident/string text from the source buffer; formats integers from the node's `value` field. |
-| `string_utils.wir` | Small `strlen` / `strncmp` / `memchr` helpers used by the lowering passes. |
+| `sexpr_tokens.wir` | Token kinds and token storage helpers. |
+| `sexpr_tree.wir` | First-child/next-sibling tree storage and accessors. |
+| `sexpr_lexer.wir` | Whitespace, comment, identifier, string, and integer lexing. |
+| `sexpr_parser.wir` | Generic recursive-descent S-expression parsing. |
+| `sexpr_print.wir` | Deterministic WIR text rendering with a growable buffer. |
+| `string_utils.wir` | Optional extern wrappers; currently not linked because no active module consumes them. |
 
 ### Surface-language layer
 
 | Module | Role |
 |---|---|
-| `surface_validate.wir` | Validates the surface tree: root must be `(program …)`; one or more `(entry …)` / `(fn …)`; each entry must have a name. |
-| `surface_struct.wir` | Lowers `(struct Name (field fname ftype) …)` into a set of getter/setter `(fn …)` nodes that the WIR backend can consume directly. |
-| `surface_lower.wir` | Lowers `(program …)` into `(core-module (core-version 1) (decls …))`. Transforms `(entry …)` into `(fn …)`, copies all `(fn …)` and `(extern …)` and `(const …)` nodes into `decls`, drops `(name …)` and `(version …)` metadata. |
+| `surface_validate.wir` | Validates the root program and admitted top-level forms. |
+| `surface_struct.wir` | Lowers struct declarations into backend-compatible functions. |
+| `surface_lower.wir` | Rewrites program packaging and entries into stable WIR declarations. |
 
 ### Pipeline glue
 
 | Module | Role |
 |---|---|
-| `driver.wir` | Orchestrates: read source → lex → parse → validate → lower → print → write output. |
-| `main.wir` | CLI entry: `weavefront <input.weave> <output.wir>`. |
+| `driver.wir` | Read, lex, parse, validate, lower, print, and write. |
+| `main.wir` | CLI argument handling and process exit status. |
 
-## Surface → WIR transformation
+## Surface-to-WIR transformation
 
-The core rewrite the lowering pass performs:
+A small surface program:
 
-```
+```weave
 (program
-  (name "demo")             ; dropped
-  (version "0.1")           ; dropped
+  (name "demo")
+  (version "0.1")
   (entry main
     (params)
     (returns i32)
-    (do (return (const_i32 42)))))
+    (do
+      (return (const_i32 42)))))
 ```
 
 becomes:
 
-```
+```wir
 (core-module
   (core-version 1)
   (decls
     (fn main
       (params)
       (returns i32)
-      (do (return (const_i32 42))))))
+      (do
+        (return (const_i32 42))))))
 ```
 
-The body itself is left untouched — it is already valid WIR.
+Program metadata is dropped, `entry` becomes `fn`, and the body remains in the
+explicit WIR form already understood by the backend.
 
-### Unified source buffer
+## Unified source buffer
 
-The lowering pass introduces **synthetic** WIR nodes (`core-module`,
-`core-version`, `fn`, `decls`, plus whatever struct lowering emits)
-that do not exist in the original source. The pretty-printer reads
-node text from a source buffer, so synthetic nodes need text to
-exist somewhere.
+Lowering creates synthetic nodes such as `core-module`, `core-version`, and
+`decls`. Those tokens do not exist in the original input, but the generic
+printer expects every node to reference source text.
 
-Solution: at the start of lowering, allocate a **unified source
-buffer** = keyword section + original source. Synthetic nodes point
-into the keyword section; copied nodes have their `text_start`
-shifted by the keyword section's length. The pretty-printer reads
-from this unified buffer for every node.
+The lowering pass therefore creates a unified source buffer:
 
-## Technical constraints
+```text
+synthetic keyword text + original source text
+```
 
-WIR is a deliberately small instruction set. A few features that
-mainstream IRs take for granted are absent and have to be worked
-around:
+Synthetic nodes point into the keyword prefix. Copied source nodes retain their
+text after their offsets are shifted by the prefix length. The same printer can
+then render both original and generated nodes deterministically.
 
-| Missing | Workaround |
-|---|---|
-| Division / modulo | Subtraction-based loops. Integer parsing builds the value digit-by-digit; integer printing extracts digits by repeated subtraction of 10. |
-| Bitwise operators | Pointer-indirection via `malloc` / `free` for state passing where bit tricks would have sufficed. |
-| Type conversion (`i32 ↔ i64`) | Repeated increment loops for the few sites that need it. |
-| Varargs | No `printf` / `snprintf`; all formatting is hand-rolled. |
+## Build and dependency model
 
-These are not bottlenecks for typical inputs (lex, parse, lower a
-few thousand lines), but they put a floor on per-iteration cost.
+On Linux x86-64, `build.sh` downloads the selected `weavec1` SDK and verifies
+the archive against release `SHA256SUMS`.
 
-## Build and dependencies
+The SDK supplies:
 
-`build.sh` compiles each `src/*.wir` module to LLVM IR with
-`weavec1`, then links the modules together with `llvm-link` and
-finally produces an executable with `clang`. The script vendors a
-pinned `weavec0` (Stage 0 seed) and `weavec1` (Stage 1) into
-`build/vendor/` on first run; both can be overridden via the
-`WEAVEC0` / `WEAVEC1` environment variables.
+```text
+bin/weavec1
+lib/libweave-runtime.a
+include/runtime.h
+```
 
-The runtime — `malloc`, `free`, `puts`, file-I/O helpers — comes
-from `weavec0`'s `runtime.c`, which the build script reuses out of
-the vendor copy.
+The build then:
+
+1. compiles each linked `src/*.wir` module to LLVM IR with `bin/weavec1`;
+2. combines the modules into `build/weavefront.bc` with `llvm-link`;
+3. links a static `build/weavefront` with the matching runtime library;
+4. writes the resolved paths and libc selection to `build/toolchain.env`.
+
+`test.sh` and `test_all.sh` source `build/toolchain.env`. They do not infer
+compiler or runtime paths independently.
+
+The published SDK path means Linux builds do not clone or rebuild `weavec0` or
+`weavec1`. macOS currently uses the source fallback because no native Stage 1
+SDK is published.
 
 ## Testing
 
-The test ladder lives under `test/` and is driven by
-`test_all.sh`. Each ladder entry is a pair `NN_name.weave` +
-`NN_name.expected.wir`. The runner:
+The full ladder under `test/` contains 58 surface fixtures. For each fixture,
+`test_all.sh`:
 
-1. Runs `weavefront NN_name.weave NN_name.wir`.
-2. Diffs the produced WIR against `NN_name.expected.wir`.
-3. Compiles the WIR through `weavec1` to LLVM IR.
-4. Validates the IR with `llvm-as`.
-5. Compiles to an executable with `clang` and verifies the exit
-   code matches the per-test expectation.
+1. runs surface Weave through `weavefront`;
+2. compares WIR output with the checked-in golden;
+3. compiles the WIR through the resolved Stage 1 compiler;
+4. links with the resolved runtime and libc toolchain;
+5. executes the result and checks the expected exit code.
 
-A passing run is a four-stage end-to-end check, not just a parser
-diff. `test.sh` is a single-test smoke for `01_return_42` and is
-useful when iterating on the front-end alone.
+CI runs the ladder on:
+
+- Linux x86-64 with the glibc Stage 1 SDK;
+- Linux x86-64 with the musl Stage 1 SDK;
+- macOS with the source fallback.
+
+`test.sh` is the single-case `return 42` smoke test.
+
+## Multifile bootstrap path
+
+`weavefront-cat.sh` combines multiple `(program ...)` source files into one
+surface compilation. It strips the outer wrappers, emits one combined program,
+and invokes `weavefront`.
+
+The separate `weavec2` repository uses this path to lower its own source tree
+during bootstrap.
+
+## Technical constraints
+
+WIR remains deliberately explicit. `weavefront` therefore avoids assumptions
+about high-level runtime or compiler services:
+
+- no type inference;
+- no macro system;
+- no in-language module resolver;
+- no optimisation pass;
+- no varargs-based formatting;
+- compact byte-stable output rather than source formatting.
 
 ## Non-goals
 
-- **Type system / inference** — WIR already has types; surface Weave
-  passes them through.
-- **Macros** — the language is intentionally minimal.
-- **Standard library** — that belongs to the WIR / runtime layer.
-- **Optimisation** — the backend (`weavec1` / `weavec2`) does its
-  own work; weavefront should be byte-stable.
-- **Module system / import resolution** — multifile builds are
-  handled by `weavefront-cat.sh`, which concatenates surface
-  sources before compilation. An in-language module system is out
-  of scope for v0.x.
+- Extending the WIR contract from the frontend.
+- Backend LLVM optimisation.
+- A general standard library.
+- A package or import system in the v0.x frontend.
+- Preserving source comments through lowering.
+
+Changes to the public lowering contract must remain deterministic and must be
+covered by an end-to-end surface fixture.
