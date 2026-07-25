@@ -104,3 +104,62 @@ jobs:
             build/audit/*.json
           if-no-files-found: warn
           retention-days: 7
+
+  downstream-weavec:
+    name: downstream weavec full ladder
+    needs: test
+    runs-on: ubuntu-latest
+    timeout-minutes: 35
+    env:
+      WEAVEC0_TAG: v0.4.0
+      WEAVEC1_VERSION: v0.3.1
+      WEAVEC1_TAG: v0.3.1
+      WEAVEC1_LIBC: glibc
+      WEAVEC_BOOTSTRAP: ${{ github.workspace }}
+      WEAVEC_BOOTSTRAP_LIBC: glibc
+
+    steps:
+      - name: Checkout bootstrap frontend under test
+        uses: actions/checkout@v4
+
+      - name: Checkout downstream weavec
+        uses: actions/checkout@v4
+        with:
+          repository: ahojukka5/weavec
+          path: downstream/weavec
+
+      - name: Install downstream toolchain
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y clang curl git llvm python3
+          clang --version
+          llvm-as --version
+          llvm-link --version
+          python3 --version
+
+      - name: Build and test downstream weavec
+        shell: bash
+        run: |
+          set -o pipefail
+          (
+            cd downstream/weavec
+            ./test-all.sh
+          ) 2>&1 | tee downstream-weavec.log
+
+      - name: Verify WIR v2 bootstrap product
+        run: |
+          test -x downstream/weavec/build/weavec
+          test -s downstream/weavec/build/weavec.wir
+          grep -F "(core-version 2)" downstream/weavec/build/weavec.wir
+
+      - name: Upload failed downstream diagnostics
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: downstream-weavec-${{ github.run_id }}
+          path: |
+            downstream-weavec.log
+            downstream/weavec/build/*.wir
+            downstream/weavec/build/*.ll
+          if-no-files-found: warn
+          retention-days: 7
