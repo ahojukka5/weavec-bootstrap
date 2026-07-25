@@ -34,6 +34,12 @@ jobs:
       - name: Checkout
         uses: actions/checkout@v4
 
+      - name: Audit frozen bootstrap boundaries
+        shell: bash
+        run: |
+          set -o pipefail
+          python3 scripts/audit_bootstrap.py 2>&1 | tee audit.log
+
       - name: Install LLVM and libc toolchains
         run: |
           sudo apt-get update
@@ -94,7 +100,10 @@ jobs:
         uses: actions/upload-artifact@v4
         with:
           name: release-diagnostics-${{ matrix.libc }}-${{ github.run_id }}
-          path: release-build.log
+          path: |
+            audit.log
+            release-build.log
+            build/audit/*.json
           if-no-files-found: warn
           retention-days: 7
 
