@@ -25,6 +25,8 @@ repository.
   frontend-only needs.
 - **Prefer changes in `weavec`.** User-facing language evolution belongs in the
   final compiler unless this stage must learn a form to bootstrap it.
+- **Keep documentation navigable.** Files under `docs/` use lowercase
+  kebab-case names and all local Markdown links must resolve.
 
 ## What does not belong here
 
@@ -37,14 +39,16 @@ repository.
 ## Development workflow
 
 1. Create a focused branch.
-2. Read `docs/ARCHITECTURE.md` and identify the affected boundary.
-3. Edit the smallest relevant source, build, test, or portability component.
+2. Read `docs/architecture.md` and identify the affected boundary.
+3. Edit the smallest relevant source, build, test, portability, or documentation
+   component.
 4. Add or update `test/NN_<name>.weave`, its `.expected.wir`, and
    `test/manifest.txt` when behavior changes.
 5. Update `PARSER_SDK_EXPORTS` only when the downstream binary interface changes.
 6. Run:
 
    ```sh
+   python3 scripts/check_docs.py
    python3 scripts/audit_bootstrap.py
    ./build.sh
    ./test_all.sh
@@ -65,8 +69,9 @@ repository.
    public contract changes.
 10. Open a focused pull request.
 
-CI validates Linux glibc, Linux musl, arm64 macOS source fallback, both static
-SDK packages, and the complete current `weavec` downstream ladder.
+CI validates documentation consistency, Linux glibc, Linux musl, arm64 macOS
+source fallback, both static SDK packages, and the complete current `weavec`
+downstream ladder.
 
 ## Dependency changes
 
@@ -76,6 +81,10 @@ the corresponding release assets and `SHA256SUMS` exist.
 
 A new `weavec-bootstrap` release must exist before changing the default pin in
 `weavec`.
+
+See [`docs/index.md`](docs/index.md),
+[`docs/architecture.md`](docs/architecture.md), and
+[`docs/releasing.md`](docs/releasing.md).
 
 ## Licensing
 
