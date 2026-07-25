@@ -7,6 +7,8 @@ named `weavefront` through release `v0.1.0`. The format follows
 
 ## [Unreleased]
 
+## [0.3.0] — 2026-07-25
+
 ### Added
 
 - `scripts/audit_bootstrap.py` and a machine-readable
