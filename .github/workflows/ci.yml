@@ -8,54 +8,11 @@ on:
     branches: [master]
 
 permissions:
-  contents: write
+  contents: read
 
 jobs:
-  migrate-wir-v2:
-    name: apply reviewed WIR v2 migration
-    if: >-
-      github.event_name == 'pull_request' &&
-      github.head_ref == 'agent/audit-bootstrap-chain'
-    runs-on: ubuntu-latest
-    steps:
-      - name: Checkout PR head
-        uses: actions/checkout@v4
-        with:
-          ref: ${{ github.head_ref }}
-
-      - name: Apply migration
-        shell: bash
-        run: |
-          set -o pipefail
-          {
-            set -euo pipefail
-            python3 scripts/migrate_wir_v2.py
-            rm -f src/string_utils.wir
-            rm -f scripts/migrate_wir_v2.py
-            rm -f migration.log
-            git config user.name github-actions[bot]
-            git config user.email 41898282+github-actions[bot]@users.noreply.github.com
-            git add -A
-            git commit -m "bootstrap: migrate frontend and goldens to WIR v2"
-            git push origin HEAD:${GITHUB_HEAD_REF}
-          } 2>&1 | tee migration.log
-
-      - name: Upload failed migration log
-        if: failure()
-        uses: actions/upload-artifact@v4
-        with:
-          name: migration-diagnostics-${{ github.run_id }}
-          path: migration.log
-          if-no-files-found: error
-          retention-days: 7
-
   test:
     name: build & test (${{ matrix.name }})
-    needs: migrate-wir-v2
-    if: >-
-      always() &&
-      (needs.migrate-wir-v2.result == 'success' ||
-       needs.migrate-wir-v2.result == 'skipped')
     runs-on: ${{ matrix.os }}
     timeout-minutes: 25
     strategy:
@@ -73,10 +30,10 @@ jobs:
             libc: glibc
 
     env:
-      WEAVEC1_VERSION: v0.2.0
-      WEAVEC1_TAG: v0.2.0
+      WEAVEC1_VERSION: v0.3.1
+      WEAVEC1_TAG: v0.3.1
       WEAVEC1_LIBC: ${{ matrix.libc }}
-      WEAVEC0_TAG: v0.2.1
+      WEAVEC0_TAG: v0.4.0
 
     steps:
       - name: Checkout
@@ -111,7 +68,10 @@ jobs:
           llvm-link --version
 
       - name: Build weavec-bootstrap
-        run: ./build.sh 2>&1 | tee build.log
+        shell: bash
+        run: |
+          set -o pipefail
+          ./build.sh 2>&1 | tee build.log
 
       - name: Verify canonical artifacts
         run: |
@@ -121,13 +81,16 @@ jobs:
           test ! -e build/weavefront
 
       - name: Run weavec-bootstrap test ladder
-        run: ./test_all.sh 2>&1 | tee test.log
+        shell: bash
+        run: |
+          set -o pipefail
+          ./test_all.sh 2>&1 | tee test.log
 
-      - name: Upload failed logs
+      - name: Upload failed diagnostics
         if: failure()
         uses: actions/upload-artifact@v4
         with:
-          name: logs-${{ matrix.name }}-${{ github.run_id }}
+          name: diagnostics-${{ matrix.name }}-${{ github.run_id }}
           path: |
             build.log
             test.log
