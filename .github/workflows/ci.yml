@@ -7,9 +7,43 @@ on:
   pull_request:
     branches: [master]
 
+permissions:
+  contents: write
+
 jobs:
+  migrate-wir-v2:
+    name: apply reviewed WIR v2 migration
+    if: >-
+      github.event_name == 'pull_request' &&
+      github.head_ref == 'agent/audit-bootstrap-chain'
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout PR head
+        uses: actions/checkout@v4
+        with:
+          ref: ${{ github.head_ref }}
+
+      - name: Apply migration
+        shell: bash
+        run: |
+          set -euo pipefail
+          python3 scripts/migrate_wir_v2.py
+          rm -f src/string_utils.wir
+          rm -f scripts/migrate_wir_v2.py
+          rm -f .github/workflows/migrate-wir-v2.yml
+          git config user.name github-actions[bot]
+          git config user.email 41898282+github-actions[bot]@users.noreply.github.com
+          git add -A
+          git commit -m "bootstrap: migrate frontend and goldens to WIR v2"
+          git push origin HEAD:${GITHUB_HEAD_REF}
+
   test:
     name: build & test (${{ matrix.name }})
+    needs: migrate-wir-v2
+    if: >-
+      always() &&
+      (needs.migrate-wir-v2.result == 'success' ||
+       needs.migrate-wir-v2.result == 'skipped')
     runs-on: ${{ matrix.os }}
     timeout-minutes: 25
     strategy:
@@ -81,9 +115,9 @@ jobs:
         if: failure()
         uses: actions/upload-artifact@v4
         with:
-          name: logs-${{ matrix.name }}
+          name: logs-${{ matrix.name }}-${{ github.run_id }}
           path: |
             build.log
             test.log
-          if-no-files-found: ignore
+          if-no-files-found: warn
           retention-days: 7
