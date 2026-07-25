@@ -66,13 +66,6 @@ def migrate_dependency_pins() -> None:
     replace_exact(build, "v0.2.0", "v0.3.1", expected=3)
     replace_exact(build, "v0.2.1", "v0.4.0", expected=2)
 
-    ci = ROOT / ".github" / "workflows" / "ci.yml"
-    replace_exact(ci, "v0.2.0", "v0.3.1", expected=2)
-    replace_exact(ci, "v0.2.1", "v0.4.0", expected=1)
-
-    release = ROOT / ".github" / "workflows" / "release.yml"
-    replace_exact(release, "v0.2.0", "v0.3.1", expected=1)
-
 
 def main() -> None:
     migrate_wir_files()
