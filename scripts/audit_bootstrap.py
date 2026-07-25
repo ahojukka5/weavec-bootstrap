@@ -25,6 +25,7 @@ CALL_FORMS = {"call_bool", "call_i32", "call_i64", "call_ptr", "call_void"}
 MODULE_RE = re.compile(r"^[A-Za-z_][A-Za-z0-9_]*$")
 TEST_RE = re.compile(r"^[0-9]{2}_[A-Za-z0-9_]+$")
 CORE_VERSION_RE = re.compile(r"^\s*\(core-version\s+([0-9]+)\)\s*$")
+CORE_VERSION_ANY_RE = re.compile(r"\(core-version\s+([0-9]+)\)")
 
 
 @dataclass(frozen=True)
@@ -172,13 +173,14 @@ def check_test_inventory(cases: dict[str, int]) -> list[str]:
         errors.append(f"test/{name}.expected.wir: golden is not listed in the manifest")
 
     for path in sorted(TEST_DIR.glob("*.expected.wir")):
-        versions = core_versions(path)
+        text = path.read_text(encoding="utf-8")
+        versions = CORE_VERSION_ANY_RE.findall(text)
         if versions != ["2"]:
             rendered = ", ".join(versions) if versions else "none"
             errors.append(
                 f"{path.relative_to(ROOT)}: expected exactly one core version 2, found {rendered}"
             )
-        if "(core-version 1)" in path.read_text(encoding="utf-8"):
+        if "(core-version 1)" in text:
             errors.append(f"{path.relative_to(ROOT)}: residual WIR v1 marker")
     return errors
 

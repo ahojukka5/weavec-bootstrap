@@ -19,7 +19,6 @@
     (extern malloc (params (size i64)) (returns ptr))
     (extern free (params (p ptr)) (returns void))
     (extern realloc (params (p ptr) (size i64)) (returns ptr))
-    (extern atoi (params (s ptr)) (returns bool))
 
     ; =============================================================================
     ; Token storage (parallel arrays)

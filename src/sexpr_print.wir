@@ -20,8 +20,6 @@
 
     ; External I/O functions
     (extern write (params (fd i32) (buf ptr) (count i64)) (returns i64))
-    (extern snprintf (params (buf ptr) (size i64) (format ptr) (value i64)) (returns i32))
-    (extern strlen (params (s ptr)) (returns i64))
 
     ; External tree functions
     (extern tree_count (params (tree ptr)) (returns i64))
@@ -160,20 +158,6 @@
     ; =============================================================================
     ; Printing helpers
     ; =============================================================================
-
-    ; Print indentation
-    (fn print_indent
-      (params (buffer ptr) (depth i64))
-      (returns void)
-      (do
-        (let i i64 (const_i64 0))
-        (while
-          (condition (lt_i64 (local_get i) (param_get depth)))
-          (do
-            (call_void buffer_append_byte (param_get buffer) (const_i32 32))  ; space
-            (call_void buffer_append_byte (param_get buffer) (const_i32 32))  ; space
-            (set i (add_i64 (local_get i) (const_i64 1)))))
-        (return_void)))
 
     ; =============================================================================
     ; Tree printing

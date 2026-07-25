@@ -23,7 +23,6 @@
     (extern memcpy (params (dest ptr) (src ptr) (n i64)) (returns ptr))
 
     ; External string length
-    (extern strlen (params (s ptr)) (returns i64))
 
     ; External tree functions
     (extern tree_new (params) (returns ptr))
@@ -213,70 +212,6 @@
                       (param_get dest_tree)
                       (local_get child)
                       (param_get source_offset)))
-
-                    (if
-                      (condition (eq_i64 (local_get new_first) (const_i64 -1)))
-                      (then (do (set new_first (local_get new_child))))
-                      (else (do
-                        (call_void node_set_next_sibling
-                          (param_get dest_tree)
-                          (local_get new_prev)
-                          (local_get new_child)))))
-
-                    (set new_prev (local_get new_child))
-                    (set child (call_i64 node_next_sibling (param_get src_tree) (local_get child)))))
-
-                ; Update first_child of new node
-                (call_void node_set_first_child
-                  (param_get dest_tree)
-                  (local_get new_node)
-                  (local_get new_first))))
-              (else (do)))))
-          (else (do)))
-
-        (return (local_get new_node))))
-
-    ; Original copy_node for backward compatibility
-    (fn copy_node
-      (params (src_tree ptr) (dest_tree ptr) (node_index i64))
-      (returns i64)
-      (do
-        (let kind i32 (call_i32 node_kind (param_get src_tree) (param_get node_index)))
-        (let text_start i64 (call_i64 node_text_start (param_get src_tree) (param_get node_index)))
-        (let text_len i64 (call_i64 node_text_len (param_get src_tree) (param_get node_index)))
-        (let value i64 (call_i64 node_value (param_get src_tree) (param_get node_index)))
-
-        ; Create new node in dest tree (will update children/siblings later)
-        (let new_node i64
-          (call_i64 tree_append_node
-            (param_get dest_tree)
-            (local_get kind)
-            (local_get text_start)
-            (local_get text_len)
-            (const_i64 -1)
-            (const_i64 -1)
-            (local_get value)))
-
-        ; If this is a list, copy children
-        (if
-          (condition (eq_i32 (local_get kind) (call_i32 node_list)))
-          (then (do
-            (let first_child i64 (call_i64 node_first_child (param_get src_tree) (param_get node_index)))
-            (if
-              (condition (ne_i64 (local_get first_child) (const_i64 -1)))
-              (then (do
-                ; Copy all children
-                (let child i64 (local_get first_child))
-                (let new_first i64 (const_i64 -1))
-                (let new_prev i64 (const_i64 -1))
-
-                (while
-                  (condition (ne_i64 (local_get child) (const_i64 -1)))
-                  (do
-                    (let new_child i64 (call_i64 copy_node
-                      (param_get src_tree)
-                      (param_get dest_tree)
-                      (local_get child)))
 
                     (if
                       (condition (eq_i64 (local_get new_first) (const_i64 -1)))
