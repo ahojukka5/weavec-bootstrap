@@ -19,8 +19,12 @@
     (extern malloc (params (size i64)) (returns ptr))
     (extern free (params (p ptr)) (returns void))
 
-    ; External file I/O
+    ; External file I/O. Output creation uses a non-variadic runtime
+    ; wrapper so the mode argument follows one ABI on every supported host.
     (extern open (params (path ptr) (flags i32) (mode i32)) (returns i32))
+    (extern weave_rt_open_write_trunc
+      (params (path ptr) (mode i32))
+      (returns i32))
     (extern close (params (fd i32)) (returns i32))
     (extern read (params (fd i32) (buf ptr) (count i64)) (returns i64))
     (extern write (params (fd i32) (buf ptr) (count i64)) (returns i64))
@@ -159,8 +163,12 @@
             (return (const_i32 5))))
           (else (do)))
 
-        ; 6. Open output file (O_WRONLY | O_CREAT | O_TRUNC = 1 | 64 | 512 = 577, mode 0644 = 420)
-        (let out_fd i32 (call_i32 open (param_get output_path) (const_i32 577) (const_i32 420)))
+        ; 6. Open output file through the fixed-signature wrapper.
+        ; mode 0644 = 420.
+        (let out_fd i32
+          (call_i32 weave_rt_open_write_trunc
+            (param_get output_path)
+            (const_i32 420)))
         (if
           (condition (lt_i32 (local_get out_fd) (const_i32 0)))
           (then (do

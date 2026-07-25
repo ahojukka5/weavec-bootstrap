@@ -149,6 +149,10 @@ run_case() {
     fail "$name: frontend produced empty WIR"
     return
   fi
+  if [[ ! -r "$wir_file" ]]; then
+    fail "$name: frontend output is not owner-readable"
+    return
+  fi
 
   if ! cmp -s "$expected_wir" "$wir_file"; then
     diff -u "$expected_wir" "$wir_file" >&2 || true

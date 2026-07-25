@@ -26,6 +26,7 @@ BUILD_DIR="$WEAVEC_BOOTSTRAP_DIR/build"
 VENDOR_DIR="$BUILD_DIR/vendor"
 TOOLCHAIN_ENV="$BUILD_DIR/toolchain.env"
 SEXPR_LIBRARY="$BUILD_DIR/libweave-sexpr.bc"
+PORTABLE_RUNTIME_C="$WEAVEC_BOOTSTRAP_DIR/runtime/portable.c"
 STACK_SIZE="0x1000000"
 
 WEAVEC1_VERSION="${WEAVEC1_VERSION:-v0.3.1}"
@@ -229,18 +230,21 @@ build_sexpr_library() {
 
 link_with_sdk() {
   local object="$BUILD_DIR/weavec-bootstrap.o"
+  local portable_object="$BUILD_DIR/weavec-bootstrap-portable.o"
   clang -Wno-override-module -O2 -c "$BUILD_DIR/weavec-bootstrap.bc" -o "$object"
 
   log "linking static weavec-bootstrap executable ($WEAVEC1_LIBC)"
   case "$WEAVEC1_LIBC" in
     glibc)
-      clang -static "$object" "$RUNTIME_LIBRARY" \
+      clang -O2 -c "$PORTABLE_RUNTIME_C" -o "$portable_object"
+      clang -static "$object" "$portable_object" "$RUNTIME_LIBRARY" \
         -Wl,-z,stack-size="$STACK_SIZE" \
         -o "$BUILD_DIR/weavec-bootstrap"
       ;;
     musl)
       require_tool musl-gcc
-      musl-gcc -static "$object" "$RUNTIME_LIBRARY" \
+      musl-gcc -O2 -c "$PORTABLE_RUNTIME_C" -o "$portable_object"
+      musl-gcc -static "$object" "$portable_object" "$RUNTIME_LIBRARY" \
         -Wl,-z,stack-size="$STACK_SIZE" \
         -o "$BUILD_DIR/weavec-bootstrap"
       ;;
@@ -250,11 +254,11 @@ link_with_sdk() {
 link_with_source() {
   log "linking weavec-bootstrap with source runtime fallback"
   if [[ "$(uname -s)" == Darwin ]]; then
-    clang "$BUILD_DIR/weavec-bootstrap.bc" "$RUNTIME_C" \
+    clang "$BUILD_DIR/weavec-bootstrap.bc" "$RUNTIME_C" "$PORTABLE_RUNTIME_C" \
       -Wl,-stack_size,"$STACK_SIZE" \
       -o "$BUILD_DIR/weavec-bootstrap"
   else
-    clang "$BUILD_DIR/weavec-bootstrap.bc" "$RUNTIME_C" \
+    clang "$BUILD_DIR/weavec-bootstrap.bc" "$RUNTIME_C" "$PORTABLE_RUNTIME_C" \
       -Wl,-z,stack-size="$STACK_SIZE" \
       -o "$BUILD_DIR/weavec-bootstrap"
   fi
@@ -284,6 +288,8 @@ main() {
   require_tool clang
   require_tool llvm-as
   require_tool llvm-link
+  [[ -f "$PORTABLE_RUNTIME_C" ]] || \
+    fail "portable runtime missing: $PORTABLE_RUNTIME_C"
   ensure_dependencies
   write_toolchain_env
   compile_modules
