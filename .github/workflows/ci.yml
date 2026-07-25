@@ -32,7 +32,7 @@ jobs:
             python3 scripts/migrate_wir_v2.py
             rm -f src/string_utils.wir
             rm -f scripts/migrate_wir_v2.py
-            rm -f .github/workflows/migrate-wir-v2.yml
+            rm -f migration.log
             git config user.name github-actions[bot]
             git config user.email 41898282+github-actions[bot]@users.noreply.github.com
             git add -A
