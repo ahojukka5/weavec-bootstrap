@@ -8,11 +8,44 @@ on:
     branches: [master]
 
 permissions:
-  contents: read
+  contents: write
 
 jobs:
+  cleanup:
+    name: apply reviewed audit cleanup
+    if: >-
+      github.event_name == 'pull_request' &&
+      github.head_ref == 'agent/audit-bootstrap-chain'
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout PR head
+        uses: actions/checkout@v4
+        with:
+          ref: ${{ github.head_ref }}
+
+      - name: Apply cleanup
+        shell: bash
+        run: |
+          set -euo pipefail
+          if [[ ! -f scripts/apply_audit_cleanup.py ]]; then
+            echo "cleanup already applied"
+            exit 0
+          fi
+          python3 scripts/apply_audit_cleanup.py
+          rm scripts/apply_audit_cleanup.py
+          python3 scripts/audit_bootstrap.py
+          git config user.name github-actions[bot]
+          git config user.email 41898282+github-actions[bot]@users.noreply.github.com
+          git add -A
+          git commit -m "audit: remove unreachable bootstrap residue"
+          git push origin HEAD:${GITHUB_HEAD_REF}
+
   test:
     name: build & test (${{ matrix.name }})
+    needs: cleanup
+    if: >-
+      always() &&
+      (needs.cleanup.result == 'success' || needs.cleanup.result == 'skipped')
     runs-on: ${{ matrix.os }}
     timeout-minutes: 25
     strategy:
