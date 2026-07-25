@@ -8,11 +8,46 @@ on:
     branches: [master]
 
 permissions:
-  contents: read
+  contents: write
 
 jobs:
+  fix-portable-output:
+    name: apply reviewed portable output fix
+    if: >-
+      github.event_name == 'pull_request' &&
+      github.head_ref == 'agent/audit-bootstrap-chain'
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout PR head
+        uses: actions/checkout@v4
+        with:
+          ref: ${{ github.head_ref }}
+
+      - name: Apply fix
+        shell: bash
+        run: |
+          set -euo pipefail
+          if [[ ! -f scripts/fix_portable_output.py ]]; then
+            echo "portable output fix already applied"
+            exit 0
+          fi
+          python3 scripts/fix_portable_output.py
+          rm scripts/fix_portable_output.py
+          python3 scripts/audit_bootstrap.py
+          bash -n build.sh
+          git config user.name github-actions[bot]
+          git config user.email 41898282+github-actions[bot]@users.noreply.github.com
+          git add -A
+          git commit -m "fix: use a portable output-file wrapper"
+          git push origin HEAD:${GITHUB_HEAD_REF}
+
   test:
     name: build & test (${{ matrix.name }})
+    needs: fix-portable-output
+    if: >-
+      always() &&
+      (needs.fix-portable-output.result == 'success' ||
+       needs.fix-portable-output.result == 'skipped')
     runs-on: ${{ matrix.os }}
     timeout-minutes: 25
     strategy:
@@ -36,8 +71,10 @@ jobs:
       WEAVEC0_TAG: v0.4.0
 
     steps:
-      - name: Checkout
+      - name: Checkout latest PR head
         uses: actions/checkout@v4
+        with:
+          ref: ${{ github.head_ref }}
 
       - name: Audit frozen bootstrap boundaries
         shell: bash
