@@ -30,7 +30,14 @@ def migrate_wir_files() -> None:
         raise RuntimeError("no WIR goldens found")
 
     for path in production + goldens:
-        replace_exact(path, "(core-version 1)", "(core-version 2)", expected=1)
+        text = path.read_text(encoding="utf-8")
+        count = text.count("(core-version 1)")
+        if count < 1:
+            raise RuntimeError(f"{path}: no WIR v1 marker found")
+        migrated = text.replace("(core-version 1)", "(core-version 2)")
+        if "(core-version 1)" in migrated:
+            raise RuntimeError(f"{path}: WIR v1 marker remains after migration")
+        path.write_text(migrated, encoding="utf-8")
 
     lower = SRC_DIR / "surface_lower.wir"
     old = """        (let core_version_num i64
