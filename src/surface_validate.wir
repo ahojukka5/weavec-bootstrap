@@ -13,7 +13,7 @@
 ; The body of functions can contain WIR-like forms - we don't validate those here.
 
 (core-module
-  (core-version 1)
+  (core-version 2)
   (decls
 
     ; External tree functions

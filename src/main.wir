@@ -6,7 +6,7 @@
 ; Usage: weavec-bootstrap <input.weave> <output.wir>
 
 (core-module
-  (core-version 1)
+  (core-version 2)
   (decls
 
     ; External driver function

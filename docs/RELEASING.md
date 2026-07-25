@@ -1,18 +1,39 @@
 # Releasing weavec-bootstrap
 
 `weavec-bootstrap` publishes static Linux x86-64 SDK archives for glibc and
-musl. A release packages the bootstrap command, multifile driver, and the single
-public parser-library boundary consumed by `weavec`.
+musl. A release packages the bootstrap executable, multifile driver, and the
+single parser-library boundary consumed by `weavec`.
 
-## Version
+## Version and immutability
 
-`VERSION` contains the release version without the `v` prefix. The release tag
-and archive names use the prefix:
+`VERSION` contains the release version without the `v` prefix. Tags and archive
+names use the prefix:
 
 ```text
-VERSION: 0.2.0
-tag:     v0.2.0
+VERSION: X.Y.Z
+tag:     vX.Y.Z
 ```
+
+A normal push to `master` creates the selected release only when it does not
+already exist. Existing `VERSION` releases remain immutable. An explicit tag
+workflow may replace damaged assets for that same tag.
+
+## Release prerequisites
+
+Before changing `VERSION`, confirm:
+
+1. `python3 scripts/audit_bootstrap.py` passes with every source function
+   reachable and every extern used;
+2. all 58 manifest cases pass on Linux glibc, Linux musl, and macOS source
+   fallback;
+3. the complete current downstream `weavec` ladder passes using this source
+   tree;
+4. both release packaging jobs pass their installed-layout smoke tests;
+5. `CHANGELOG.md`, README, architecture, and dependency pins are current;
+6. the selected `weavec1` release and `SHA256SUMS` already exist.
+
+Do not update the default `weavec` SDK pin until the new bootstrap release assets
+and checksums are published.
 
 ## SDK layout
 
@@ -34,41 +55,64 @@ The executable is statically linked for the selected libc. The parser library is
 LLVM bitcode and is linked by downstream bootstrap consumers as one unit.
 `weavec-bootstrap-cat` requires Python 3 at runtime.
 
-## Local packaging
+The executable includes the local fixed-signature host shim from
+`runtime/portable.c`; this is an implementation detail and does not add another
+SDK file or public runtime dependency.
 
-Build and test the matching libc variant first:
+## Local validation and packaging
+
+Use the version selected by the repository:
 
 ```sh
+version="v$(tr -d '[:space:]' < VERSION)"
+```
+
+For glibc:
+
+```sh
+python3 scripts/audit_bootstrap.py
 WEAVEC1_LIBC=glibc ./build.sh
 ./test_all.sh
-bash scripts/package-linux-sdk.sh glibc v0.2.0 dist
+bash scripts/package-linux-sdk.sh glibc "$version" dist
 ```
 
 For musl:
 
 ```sh
+python3 scripts/audit_bootstrap.py
 WEAVEC1_LIBC=musl ./build.sh
 ./test_all.sh
-bash scripts/package-linux-sdk.sh musl v0.2.0 dist
+bash scripts/package-linux-sdk.sh musl "$version" dist
 ```
 
-The packaging script verifies that the compiler has no dynamic ELF interpreter,
-runs a single-file compiler smoke test, runs the installed-layout multifile
-driver, and writes `SDK-MANIFEST`.
+The packaging script verifies static linkage, compiles single-file and
+multifile samples through the installed layout, and writes `SDK-MANIFEST`.
 
-## CI and publication
+## Published assets
 
-`.github/workflows/release.yml` builds both SDK variants for pull requests,
-`master`, explicit tags, and manual dispatches.
+A normal release contains:
 
-On a successful push to `master`, the workflow creates the immutable release
-selected by `VERSION` when it does not already exist. An explicit `v*` tag build
-may replace assets for that same tag. Each release contains both archives and a
-`SHA256SUMS` file.
+```text
+weavec-bootstrap-vX.Y.Z-linux-x86_64-glibc.tar.gz
+weavec-bootstrap-vX.Y.Z-linux-x86_64-musl.tar.gz
+SHA256SUMS
+```
 
-Before changing `VERSION`:
+Downstream builds must pin the tag and verify the selected archive against
+`SHA256SUMS` before extraction.
 
-1. confirm the complete glibc, musl, and macOS CI matrix is green;
-2. confirm the public SDK layout remains compatible or document the break;
-3. update `CHANGELOG.md` and this document when the package contract changes;
-4. update the `weavec` SDK pin only after the release assets and checksums exist.
+## Publication workflow
+
+`.github/workflows/release.yml` builds both libc variants for pull requests,
+`master`, explicit tags, and manual dispatches. On a successful `master` push it
+publishes the release selected by `VERSION` when absent.
+
+After publication:
+
+1. verify that the tag resolves to the merged release commit;
+2. verify both archives and `SHA256SUMS` are present;
+3. update the default `WEAVEC_BOOTSTRAP_VERSION` and source fallback ref in
+   `weavec`;
+4. run the complete `weavec` matrix against the published SDKs;
+5. do not add further features to the released bootstrap line—only bootstrap
+   correctness, security, portability, reproducibility, or packaging fixes.

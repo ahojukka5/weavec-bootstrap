@@ -16,7 +16,7 @@
 ;   225: v          235: self       239: return_void
 
 (core-module
-  (core-version 1)
+  (core-version 2)
   (decls
 
     ; External memory functions
@@ -107,16 +107,6 @@
         (call_void node_set_first_child (param_get tree) (param_get parent) (param_get c1))
         (call_void node_set_next_sibling (param_get tree) (param_get c1) (param_get c2))
         (call_void node_set_next_sibling (param_get tree) (param_get c2) (param_get c3))
-        (return_void)))
-
-    (fn link4
-      (params (tree ptr) (parent i64) (c1 i64) (c2 i64) (c3 i64) (c4 i64))
-      (returns void)
-      (do
-        (call_void node_set_first_child (param_get tree) (param_get parent) (param_get c1))
-        (call_void node_set_next_sibling (param_get tree) (param_get c1) (param_get c2))
-        (call_void node_set_next_sibling (param_get tree) (param_get c2) (param_get c3))
-        (call_void node_set_next_sibling (param_get tree) (param_get c3) (param_get c4))
         (return_void)))
 
     (fn link5

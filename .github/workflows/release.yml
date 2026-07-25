@@ -27,12 +27,18 @@ jobs:
         libc: [glibc, musl]
 
     env:
-      WEAVEC1_VERSION: v0.2.0
+      WEAVEC1_VERSION: v0.3.1
       WEAVEC1_LIBC: ${{ matrix.libc }}
 
     steps:
       - name: Checkout
         uses: actions/checkout@v4
+
+      - name: Audit frozen bootstrap boundaries
+        shell: bash
+        run: |
+          set -o pipefail
+          python3 scripts/audit_bootstrap.py 2>&1 | tee audit.log
 
       - name: Install LLVM and libc toolchains
         run: |
@@ -53,9 +59,13 @@ jobs:
           musl-gcc --version
 
       - name: Build bootstrap frontend and run the full ladder
+        shell: bash
         run: |
-          ./build.sh
-          ./test_all.sh
+          set -o pipefail
+          {
+            ./build.sh
+            ./test_all.sh
+          } 2>&1 | tee release-build.log
 
       - name: Select archive version
         id: version
@@ -84,6 +94,18 @@ jobs:
           path: dist/*.tar.gz
           if-no-files-found: error
           retention-days: 14
+
+      - name: Upload failed diagnostics
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: release-diagnostics-${{ matrix.libc }}-${{ github.run_id }}
+          path: |
+            audit.log
+            release-build.log
+            build/audit/*.json
+          if-no-files-found: warn
+          retention-days: 7
 
   publish-release:
     name: Publish GitHub Release

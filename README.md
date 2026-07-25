@@ -3,54 +3,162 @@
 [![ci](https://github.com/ahojukka5/weavec-bootstrap/actions/workflows/ci.yml/badge.svg)](https://github.com/ahojukka5/weavec-bootstrap/actions/workflows/ci.yml)
 [![release](https://github.com/ahojukka5/weavec-bootstrap/actions/workflows/release.yml/badge.svg)](https://github.com/ahojukka5/weavec-bootstrap/actions/workflows/release.yml)
 
-> A deterministic surface-Weave-to-WIR frontend used to bootstrap the
-> self-hosted `weavec` compiler.
+`weavec-bootstrap` is the deterministic frontend used to bootstrap the
+self-hosted [`weavec`](https://github.com/ahojukka5/weavec) compiler. It lowers
+surface Weave to stable WIR v2. It is not the final user-facing compiler.
 
-This repository was previously named `weavefront`. It is a bootstrap component,
-not the final user-facing compiler.
-
-## Role
-
-```text
-.weave source
-      ↓
-weavec-bootstrap
-      ↓
-     WIR
-      ↓
-   weavec1
-      ↓
-   LLVM IR
-```
-
-`weavec-bootstrap` owns the **surface → WIR** boundary. It is written in WIR,
-built with the published `weavec1` SDK, and supplies the first frontend capable
-of building [`weavec`](https://github.com/ahojukka5/weavec) from surface-Weave
-source.
-
-The frontend contains generic S-expression token, tree, lexer, parser, and
-printer modules with deterministic surface validation and lowering layered on
-top. See [`docs/ARCHITECTURE.md`](docs/ARCHITECTURE.md).
-
-## Compiler chain
-
-| Component | Repository | Role |
-|---|---|---|
-| `weavec0` | [`ahojukka5/weavec0`](https://github.com/ahojukka5/weavec0) | Hand-written Stage 0 seed and SDK. |
-| `weavec1` | [`ahojukka5/weavec1`](https://github.com/ahojukka5/weavec1) | WIR compiler and Stage 1 SDK. |
-| `weavec-bootstrap` | **this repository** | Surface-to-WIR bootstrap frontend and SDK. |
-| `weavec` | [`ahojukka5/weavec`](https://github.com/ahojukka5/weavec) | User-facing self-hosted compiler. |
+## Position in the compiler chain
 
 ```text
 weavec0 → weavec1 → weavec-bootstrap → weavec
+   WIR      LLVM        surface → WIR      self-hosted compiler
 ```
 
-Normal language and compiler development belongs in `weavec`. This repository
-should remain a small, stable, reproducible bootstrap frontend.
+| Component | Responsibility |
+|---|---|
+| [`weavec0`](https://github.com/ahojukka5/weavec0) | Minimal hand-written Stage 0 seed and runtime SDK. |
+| [`weavec1`](https://github.com/ahojukka5/weavec1) | Stable WIR v2 backend and Stage 1 SDK. |
+| **`weavec-bootstrap`** | Frozen surface-Weave-to-WIR-v2 bootstrap frontend and parser SDK. |
+| [`weavec`](https://github.com/ahojukka5/weavec) | User-facing self-hosted compiler and language development. |
+
+Language evolution belongs in `weavec`. This repository changes only when the
+bootstrap chain requires a correctness, security, portability, reproducibility,
+or packaging fix.
+
+## Contract
+
+The frontend accepts a deliberately small surface language and emits only WIR
+v2 already admitted by `weavec1`. Function bodies remain close to explicit WIR
+operations; lowering is a deterministic tree rewrite, not an optimizing or
+inferential compiler pass.
+
+The repository enforces these boundaries:
+
+- every production `src/*.wir` file is listed exactly once in `build.sh`;
+- every production module declares `(core-version 2)` exactly once;
+- every direct WIR call resolves to a source function or declared extern;
+- every source function is reachable from `main` or a documented parser SDK export;
+- every declared extern is used;
+- every test source and WIR golden belongs to exactly one manifest case;
+- the parser SDK exports exactly the symbols listed in `PARSER_SDK_EXPORTS`;
+- the current downstream `weavec` full ladder must pass with this source tree.
+
+Run the static audit directly with:
+
+```bash
+python3 scripts/audit_bootstrap.py
+```
+
+The audit writes a machine-readable report to
+`build/audit/weavec-bootstrap.json`.
+
+## Dependencies
+
+Linux x86-64 builds consume the checksum-verified `weavec1 v0.3.1` SDK by
+default. The selected archive provides both the compiler and matching static
+runtime library.
+
+macOS uses pinned source fallbacks:
+
+- `weavec1 v0.3.1`;
+- `weavec0 v0.4.0`.
+
+Important overrides:
+
+```text
+WEAVEC1_SDK=/path/to/extracted/sdk
+WEAVEC1_VERSION=vX.Y.Z
+WEAVEC1_LIBC=glibc|musl
+WEAVEC1=/path/to/weavec1/source
+WEAVEC1_TAG=vX.Y.Z
+WEAVEC0=/path/to/weavec0/source
+WEAVEC0_TAG=vX.Y.Z
+```
+
+Explicit source and SDK paths take precedence over published downloads.
+
+## Build and test
+
+Required tools:
+
+- Bash 4 or newer;
+- LLVM 14 or newer: `clang`, `llvm-as`, and `llvm-link`;
+- `curl`, `tar`, and `sha256sum` for SDK downloads;
+- Python 3 for the multifile driver;
+- `musl-gcc` for the musl build.
+
+```bash
+git clone https://github.com/ahojukka5/weavec-bootstrap.git
+cd weavec-bootstrap
+python3 scripts/audit_bootstrap.py
+./build.sh
+./test_all.sh
+```
+
+Select the Linux libc variant with:
+
+```bash
+WEAVEC1_LIBC=glibc ./build.sh
+WEAVEC1_LIBC=musl ./build.sh
+```
+
+`test_all.sh` reads `test/manifest.txt` and runs all 58 cases through one complete
+pipeline:
+
+```text
+surface Weave
+  → weavec-bootstrap
+  → byte-identical WIR v2 golden
+  → weavec1
+  → valid LLVM bitcode
+  → native executable
+  → expected exit code
+```
+
+## Build products
+
+`./build.sh` produces:
+
+```text
+build/weavec-bootstrap       surface Weave → WIR v2 executable
+build/weavec-bootstrap.bc    complete frontend LLVM bitcode
+build/libweave-sexpr.bc      reusable parser-library boundary
+build/toolchain.env          resolved compiler/runtime configuration
+```
+
+The executable links a tiny local host shim from `runtime/portable.c`. The shim
+provides fixed-signature wrappers for host APIs whose native C interfaces are
+variadic. This keeps arm64 macOS, glibc, and musl on one stable ABI without
+expanding the Stage 0 runtime.
+
+## Parser SDK
+
+The parser library combines:
+
+```text
+src/sexpr_tokens.wir
+src/sexpr_tree.wir
+src/sexpr_lexer.wir
+src/sexpr_parser.wir
+```
+
+Its 13 public symbols are listed in `PARSER_SDK_EXPORTS`. Downstream stages link
+`libweave-sexpr.bc` as one unit and must not depend on individual generated
+module files.
+
+## Multifile bootstrap
+
+```bash
+./weavec-bootstrap-cat.sh /tmp/combined.wir foo.weave bar.weave
+```
+
+The driver strips outer program wrappers, combines modules in caller-supplied
+order, and invokes the frontend once. `weavec` uses this path for its first
+bootstrap build.
 
 ## Published SDK
 
-Release `v0.2.0` introduces static Linux x86-64 SDKs for glibc and musl:
+Releases publish static Linux x86-64 archives for glibc and musl:
 
 ```text
 weavec-bootstrap-vX.Y.Z-linux-x86_64-<libc>/
@@ -66,185 +174,38 @@ weavec-bootstrap-vX.Y.Z-linux-x86_64-<libc>/
 └── NOTICE
 ```
 
-The SDK exposes exactly three executable/build interfaces:
+The installed multifile driver requires Python 3. Release assets include
+`SHA256SUMS`; downstream builds must pin a version and verify the selected
+archive before extraction. See [`docs/RELEASING.md`](docs/RELEASING.md).
 
-- `bin/weavec-bootstrap` lowers one surface program to WIR;
-- `bin/weavec-bootstrap-cat` combines multiple surface modules and lowers them;
-- `lib/libweave-sexpr.bc` is the single reusable parser-library boundary.
+## CI coverage
 
-The compiler executable is statically linked for the selected libc. The
-multifile driver requires Python 3. Release downloads include `SHA256SUMS`.
-See [`docs/RELEASING.md`](docs/RELEASING.md).
+CI validates:
 
-## Prerequisites
+- Linux x86-64 with the glibc `weavec1` SDK;
+- Linux x86-64 with the musl `weavec1` SDK;
+- arm64 macOS using pinned source fallbacks;
+- all static source, test, reachability, extern, and parser-export invariants;
+- the complete current `weavec` correctness, performance, quantum, and self-host ladders.
 
-Source builds on Linux x86-64 download the versioned `weavec1` SDK and do not
-rebuild `weavec0` or `weavec1`.
+The release workflow separately builds and smokes both static SDK variants.
 
-Required tools:
+## Non-goals
 
-- Bash 4 or newer;
-- LLVM 14 or newer: `clang`, `llvm-as`, and `llvm-link`;
-- `curl`, `tar`, and `sha256sum`;
-- Python 3 for the multifile driver;
-- `musl-gcc` only for the musl variant.
+- Extending WIR from the frontend.
+- General language development.
+- Type inference, macros, package resolution, or optimization.
+- Preserving source comments through lowering.
+- Publishing non-Linux binary SDKs at this stage.
 
-Ubuntu:
+## Documentation
 
-```bash
-sudo apt-get install -y llvm clang curl python3 musl-tools
-```
-
-macOS currently uses the source fallback:
-
-```bash
-brew install llvm git
-export PATH="$(brew --prefix llvm)/bin:$PATH"
-```
-
-## Quick start from source
-
-```bash
-git clone https://github.com/ahojukka5/weavec-bootstrap.git
-cd weavec-bootstrap
-./build.sh
-./test_all.sh
-```
-
-The first Linux build downloads `weavec1 v0.2.0`, verifies the archive against
-`SHA256SUMS`, and caches it under `build/vendor/weavec1-sdk/`.
-
-Compile a surface program:
-
-```bash
-./build/weavec-bootstrap test/01_return_42.weave /tmp/out.wir
-```
-
-Compile multiple modules:
-
-```bash
-./weavec-bootstrap-cat.sh /tmp/combined.wir foo.weave bar.weave
-```
-
-In an extracted SDK, the corresponding commands are:
-
-```bash
-./bin/weavec-bootstrap input.weave output.wir
-./bin/weavec-bootstrap-cat combined.wir foo.weave bar.weave
-```
-
-## Stage 1 dependency
-
-```text
-weavec1-v0.2.0-linux-x86_64-<libc>/
-├── bin/weavec1
-├── lib/libweave-runtime.a
-├── include/runtime.h
-└── SDK-MANIFEST
-```
-
-`build.sh` records the resolved compiler, runtime, and libc selection in
-`build/toolchain.env`. Both test commands source that file.
-
-Select the Linux variant with:
-
-```bash
-WEAVEC1_LIBC=glibc ./build.sh
-WEAVEC1_LIBC=musl ./build.sh
-```
-
-Environment overrides:
-
-- `WEAVEC1_SDK=/path/to/sdk` uses an extracted SDK;
-- `WEAVEC1_VERSION=vX.Y.Z` selects a published release;
-- `WEAVEC1_LIBC=glibc|musl` selects the archive and linker;
-- `WEAVEC1_RELEASE_BASE=<url>` overrides the release base;
-- `WEAVEC1=/path/to/source` selects a pre-built source tree;
-- `WEAVEC1_TAG=vX.Y.Z` selects the source fallback;
-- `WEAVEC0` and `WEAVEC0_TAG` control Stage 0 only for source fallback.
-
-## Build outputs
-
-`./build.sh` produces three named artifacts:
-
-```text
-build/weavec-bootstrap       surface Weave → WIR executable
-build/weavec-bootstrap.bc    complete frontend LLVM bitcode
-build/libweave-sexpr.bc      reusable tokenizer/tree/lexer/parser library
-```
-
-The parser library combines the generated forms of:
-
-```text
-src/sexpr_tokens.wir
-src/sexpr_tree.wir
-src/sexpr_lexer.wir
-src/sexpr_parser.wir
-```
-
-These sources belong here because they implement the parser used by the
-bootstrap frontend. Downstream stages consume the single named library instead
-of reaching into this repository for four unrelated `.ll` build products.
-
-The executable owns its 16 MiB main-thread stack requirement. Downstream
-repositories must not patch this repository's build script.
-
-## Build pipeline
-
-`./build.sh`:
-
-1. resolves the Stage 1 SDK or source fallback;
-2. compiles the linked `src/*.wir` modules with `weavec1`;
-3. creates `build/libweave-sexpr.bc` from the four reusable parser modules;
-4. combines all frontend modules into `build/weavec-bootstrap.bc`;
-5. links the `build/weavec-bootstrap` executable with the matching runtime;
-6. writes `build/toolchain.env` for tests and downstream bootstrap use.
-
-## Repository layout
-
-```text
-weavec-bootstrap/
-├── build.sh
-├── test.sh
-├── test_all.sh
-├── weavec-bootstrap-cat.sh
-├── VERSION
-├── scripts/package-linux-sdk.sh
-├── src/
-├── test/
-├── docs/ARCHITECTURE.md
-├── docs/RELEASING.md
-└── build/
-```
-
-## Tests
-
-`./test_all.sh` runs every surface fixture through:
-
-1. surface Weave → WIR with `weavec-bootstrap`;
-2. byte-for-byte comparison with the WIR golden;
-3. WIR → LLVM IR with the resolved `weavec1` compiler;
-4. native linking with the resolved runtime;
-5. execution and exit-code verification.
-
-CI covers Linux x86-64 glibc, Linux x86-64 musl, and the macOS source fallback.
-The release workflow additionally builds, inspects, smokes, and archives both
-Linux SDK variants. `./test.sh` runs the smallest `return 42` smoke case.
-
-## Known limitations
-
-- Surface Weave intentionally stays close to WIR.
-- Output is compact and byte-stable rather than source-formatted.
-- Diagnostics use byte offsets rather than full source ranges.
-- Published SDKs currently cover Linux x86-64 only.
-- The installed multifile driver requires Python 3.
+- [`docs/ARCHITECTURE.md`](docs/ARCHITECTURE.md)
+- [`docs/RELEASING.md`](docs/RELEASING.md)
+- [`CONTRIBUTING.md`](CONTRIBUTING.md)
+- [`CHANGELOG.md`](CHANGELOG.md)
 
 ## License
 
 Licensed under the Apache License, Version 2.0. See [`LICENSE`](LICENSE) and
 [`NOTICE`](NOTICE).
-
-## Contributing
-
-Read [`CONTRIBUTING.md`](CONTRIBUTING.md) before changing the lowering contract,
-SDK layout, dependency assumptions, or bootstrap outputs.
