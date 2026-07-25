@@ -9,6 +9,7 @@ WEAVEC_BOOTSTRAP_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 BUILD_DIR="$WEAVEC_BOOTSTRAP_DIR/build"
 VENDOR_DIR="$BUILD_DIR/vendor"
 TOOLCHAIN_ENV="$BUILD_DIR/toolchain.env"
+MANIFEST="$WEAVEC_BOOTSTRAP_DIR/test/manifest.txt"
 
 cd "$WEAVEC_BOOTSTRAP_DIR"
 
@@ -30,114 +31,63 @@ PASS_COUNT=0
 FAIL_COUNT=0
 
 log() {
-  echo "[test-all] $*"
+  printf '[test-all] %s\n' "$*"
 }
 
 fail() {
-  echo "[test-all] ERROR: $*" >&2
+  printf '[test-all] ERROR: %s\n' "$*" >&2
   FAIL_COUNT=$((FAIL_COUNT + 1))
 }
 
+require_tool() {
+  command -v "$1" >/dev/null 2>&1 || {
+    printf '[test-all] required tool not found: %s\n' "$1" >&2
+    exit 1
+  }
+}
+
 [[ -x "$WEAVEC_BOOTSTRAP" ]] || {
-  echo "weavec-bootstrap not found at $WEAVEC_BOOTSTRAP (run ./build.sh first)" >&2
+  printf 'weavec-bootstrap not found at %s (run ./build.sh first)\n' \
+    "$WEAVEC_BOOTSTRAP" >&2
   exit 1
 }
 [[ -x "$WEAVEC1_BIN" ]] || {
-  echo "weavec1 not found at $WEAVEC1_BIN (run ./build.sh first)" >&2
+  printf 'weavec1 not found at %s (run ./build.sh first)\n' "$WEAVEC1_BIN" >&2
   exit 1
 }
+[[ -f "$MANIFEST" ]] || {
+  printf 'test manifest not found: %s\n' "$MANIFEST" >&2
+  exit 1
+}
+
+require_tool clang
+require_tool diff
+require_tool llvm-as
 
 case "$WEAVE_RUNTIME_MODE" in
   sdk)
     [[ -s "$WEAVE_RUNTIME_LIBRARY" ]] || {
-      echo "runtime library not found: $WEAVE_RUNTIME_LIBRARY" >&2
+      printf 'runtime library not found: %s\n' "$WEAVE_RUNTIME_LIBRARY" >&2
       exit 1
     }
     if [[ "$WEAVE_RUNTIME_LIBC" == musl ]]; then
-      command -v musl-gcc >/dev/null 2>&1 || {
-        echo "musl-gcc is required for the musl SDK tests" >&2
-        exit 1
-      }
+      require_tool musl-gcc
     fi
     ;;
   source)
     [[ -f "$WEAVE_RUNTIME_C" ]] || {
-      echo "runtime source not found: $WEAVE_RUNTIME_C" >&2
+      printf 'runtime source not found: %s\n' "$WEAVE_RUNTIME_C" >&2
       exit 1
     }
     ;;
   *)
-    echo "unknown runtime mode: $WEAVE_RUNTIME_MODE" >&2
+    printf 'unknown runtime mode: %s\n' "$WEAVE_RUNTIME_MODE" >&2
     exit 1
     ;;
 esac
 
 mkdir -p "$BUILD_DIR/test_wir" "$BUILD_DIR/test_ll" \
-  "$BUILD_DIR/test_obj" "$BUILD_DIR/test_bin"
-
-get_expected_exit() {
-  case "$1" in
-    01_return_42)                        echo 42  ;;
-    02_return_constant)                  echo 0   ;;
-    03_return_42)                        echo 42  ;;
-    04_add_i32)                          echo 42  ;;
-    05_one_arg_function)                 echo 43  ;;
-    06_let_local)                        echo 42  ;;
-    07_set_local)                        echo 42  ;;
-    08_if)                               echo 42  ;;
-    09_while)                            echo 42  ;;
-    10_two_arg_function)                 echo 42  ;;
-    11_string_literal)                   echo 42  ;;
-    12_const_i64)                        echo 42  ;;
-    13_i64_arithmetic)                   echo 42  ;;
-    14_i64_comparisons)                  echo 42  ;;
-    15_bool_ops)                         echo 42  ;;
-    16_ptr_null)                         echo 42  ;;
-    17_extern_malloc_free)               echo 42  ;;
-    18_ptr_add_store_load_i64)           echo 42  ;;
-    19_store_load_i8)                    echo 42  ;;
-    20_call_void)                        echo 42  ;;
-    21_call_i64)                         echo 42  ;;
-    22_call_ptr)                         echo 42  ;;
-    23_return_void)                      echo 42  ;;
-    24_mod_i32)                          echo 2   ;;
-    25_buffer_like_smoke)                echo 42  ;;
-    26_ptr_params_call_i32)              echo 42  ;;
-    27_bool_return)                      echo 42  ;;
-    28_three_arg_function)               echo 42  ;;
-    29_i32_memory_and_cast)              echo 42  ;;
-    30_const_string_ptr)                 echo 42  ;;
-    31_i64_sub_eq)                       echo 42  ;;
-    32_not_bool)                         echo 42  ;;
-    33_codegen_join_and_i64_arg)         echo 42  ;;
-    34_store_i8_temp)                    echo 42  ;;
-    35_ge_i32)                           echo 42  ;;
-    36_sub_i32)                          echo 42  ;;
-    37_mul_i32)                          echo 42  ;;
-    38_div_i32)                          echo 42  ;;
-    39_i32_comparisons_full)             echo 42  ;;
-    40_i64_ge_gt)                        echo 42  ;;
-    41_call_bool_direct)                 echo 42  ;;
-    42_load_store_ptr)                   echo 42  ;;
-    43_empty_do)                         echo 42  ;;
-    44_if_fallthrough_join)              echo 42  ;;
-    45_while_zero_iterations)            echo 42  ;;
-    46_nested_while)                     echo 42  ;;
-    47_forward_function_call)            echo 42  ;;
-    48_multiple_externs_used_subset)     echo 42  ;;
-    49_string_escape)                    echo 42  ;;
-    50_negative_i32_literal)             echo 42  ;;
-    51_debug_marker)                     echo 42  ;;
-    52_integration_nested_control_flow)  echo 75  ;;
-    53_integration_multi_function_chain) echo 35  ;;
-    54_integration_memory_flow)          echo 100 ;;
-    55_new_operators)                    echo 40  ;;
-    56_extern_decl)                      echo 42  ;;
-    57_struct_basic)                     echo 42  ;;
-    58_const_decl)                       echo 42  ;;
-    *) echo 42 ;;
-  esac
-}
+  "$BUILD_DIR/test_obj" "$BUILD_DIR/test_bin" "$BUILD_DIR/test_logs"
 
 link_test_executable() {
   local ll_file="$1"
@@ -149,12 +99,10 @@ link_test_executable() {
       clang -Wno-override-module -O2 -c "$ll_file" -o "$object_file"
       case "$WEAVE_RUNTIME_LIBC" in
         glibc)
-          clang -static "$object_file" "$WEAVE_RUNTIME_LIBRARY" \
-            -o "$bin_file"
+          clang -static "$object_file" "$WEAVE_RUNTIME_LIBRARY" -o "$bin_file"
           ;;
         musl)
-          musl-gcc -static "$object_file" "$WEAVE_RUNTIME_LIBRARY" \
-            -o "$bin_file"
+          musl-gcc -static "$object_file" "$WEAVE_RUNTIME_LIBRARY" -o "$bin_file"
           ;;
         *) return 1 ;;
       esac
@@ -165,84 +113,105 @@ link_test_executable() {
   esac
 }
 
-for weave_file in test/*.weave; do
-  test_name=$(basename "$weave_file" .weave)
-  expected_wir="test/${test_name}.expected.wir"
-  wir_file="$BUILD_DIR/test_wir/${test_name}.wir"
+run_case() {
+  local name="$1"
+  local expected_exit="$2"
+  local weave_file="test/${name}.weave"
+  local expected_wir="test/${name}.expected.wir"
+  local wir_file="$BUILD_DIR/test_wir/${name}.wir"
+  local ll_file="$BUILD_DIR/test_ll/${name}.ll"
+  local bc_file="$BUILD_DIR/test_ll/${name}.bc"
+  local object_file="$BUILD_DIR/test_obj/${name}.o"
+  local bin_file="$BUILD_DIR/test_bin/${name}"
+  local frontend_log="$BUILD_DIR/test_logs/${name}.frontend.log"
+  local backend_log="$BUILD_DIR/test_logs/${name}.backend.log"
 
-  log "Testing (wir): $test_name"
+  [[ -f "$weave_file" ]] || {
+    fail "$name: source fixture is missing"
+    return
+  }
+  [[ -f "$expected_wir" ]] || {
+    fail "$name: expected WIR fixture is missing"
+    return
+  }
 
-  rm -f "$wir_file"
-  if ! "$WEAVEC_BOOTSTRAP" "$weave_file" "$wir_file" 2>/dev/null; then
-    fail "$test_name: weavec-bootstrap compilation failed"
-    continue
+  log "Testing: $name"
+  rm -f "$wir_file" "$ll_file" "$bc_file" "$object_file" "$bin_file" \
+    "$frontend_log" "$backend_log"
+
+  if ! "$WEAVEC_BOOTSTRAP" "$weave_file" "$wir_file" \
+      >"$frontend_log" 2>&1; then
+    cat "$frontend_log" >&2
+    fail "$name: surface-to-WIR compilation failed"
+    return
   fi
-  chmod u+r "$wir_file" 2>/dev/null || true
-
-  actual_wir=$(cat "$wir_file")
-  expected=$(cat "$expected_wir")
-  if [[ "$actual_wir" != "$expected" ]]; then
-    fail "$test_name: WIR output mismatch"
-    echo "  expected: $expected" >&2
-    echo "  actual:   $actual_wir" >&2
-    continue
-  fi
-
-  log "  ✓ $test_name PASSED"
-  PASS_COUNT=$((PASS_COUNT + 1))
-done
-
-for weave_file in test/*.weave; do
-  test_name=$(basename "$weave_file" .weave)
-  wir_file="$BUILD_DIR/test_wir/${test_name}.wir"
-  ll_file="$BUILD_DIR/test_ll/${test_name}.ll"
-  object_file="$BUILD_DIR/test_obj/${test_name}.o"
-  bin_file="$BUILD_DIR/test_bin/${test_name}"
-
-  log "Testing (e2e): $test_name"
-
-  if [[ ! -f "$wir_file" ]]; then
-    rm -f "$wir_file"
-    if ! "$WEAVEC_BOOTSTRAP" "$weave_file" "$wir_file" 2>/dev/null; then
-      fail "$test_name: weavec-bootstrap compilation failed"
-      continue
-    fi
-    chmod u+r "$wir_file" 2>/dev/null || true
+  if [[ ! -s "$wir_file" ]]; then
+    fail "$name: frontend produced empty WIR"
+    return
   fi
 
-  if ! "$WEAVEC1_BIN" "$wir_file" "$ll_file" 2>&1 | \
-      grep -q "compilation succeeded"; then
-    fail "$test_name: weavec1 compilation failed"
-    continue
+  if ! cmp -s "$expected_wir" "$wir_file"; then
+    diff -u "$expected_wir" "$wir_file" >&2 || true
+    fail "$name: WIR output differs byte for byte"
+    return
   fi
 
-  if ! link_test_executable "$ll_file" "$object_file" "$bin_file" \
-      2>/dev/null; then
-    fail "$test_name: executable link failed"
-    continue
+  if ! "$WEAVEC1_BIN" "$wir_file" "$ll_file" >"$backend_log" 2>&1; then
+    cat "$backend_log" >&2
+    fail "$name: WIR-to-LLVM compilation failed"
+    return
+  fi
+  if [[ ! -s "$ll_file" ]]; then
+    fail "$name: backend produced empty LLVM IR"
+    return
+  fi
+  if ! llvm-as "$ll_file" -o "$bc_file"; then
+    fail "$name: generated LLVM IR does not assemble"
+    return
+  fi
+  if ! link_test_executable "$ll_file" "$object_file" "$bin_file"; then
+    fail "$name: executable link failed"
+    return
   fi
 
   set +e
   "$bin_file"
-  actual_exit=$?
+  local actual_exit=$?
   set -e
 
-  expected_exit=$(get_expected_exit "$test_name")
-  if [[ $actual_exit != $expected_exit ]]; then
-    fail "$test_name: expected exit $expected_exit, got $actual_exit"
-    continue
+  if [[ "$actual_exit" != "$expected_exit" ]]; then
+    fail "$name: expected exit $expected_exit, got $actual_exit"
+    return
   fi
 
-  log "  ✓ $test_name PASSED (exit code: $actual_exit)"
   PASS_COUNT=$((PASS_COUNT + 1))
-done
+  log "  ✓ $name (exit code: $actual_exit)"
+}
+
+while IFS= read -r line || [[ -n "$line" ]]; do
+  line="${line%%#*}"
+  line="${line#"${line%%[![:space:]]*}"}"
+  [[ -z "$line" ]] && continue
+
+  read -r kind name expected_exit extra <<<"$line"
+  if [[ "$kind" != pass || -z "$name" || -z "$expected_exit" || -n "${extra:-}" ]]; then
+    printf '[test-all] invalid manifest entry: %s\n' "$line" >&2
+    exit 1
+  fi
+  if [[ ! "$expected_exit" =~ ^[0-9]+$ ]] || (( expected_exit > 255 )); then
+    printf '[test-all] invalid exit code in manifest: %s\n' "$line" >&2
+    exit 1
+  fi
+
+  run_case "$name" "$expected_exit"
+done < "$MANIFEST"
 
 log ""
 log "=========================================="
 log "Test Results: $PASS_COUNT passed, $FAIL_COUNT failed"
 log "=========================================="
 
-if [[ $FAIL_COUNT -gt 0 ]]; then
+if (( FAIL_COUNT > 0 )); then
   exit 1
 fi
 
