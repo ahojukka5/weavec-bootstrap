@@ -7,6 +7,49 @@ named `weavefront` through release `v0.1.0`. The format follows
 
 ## [Unreleased]
 
+### Added
+
+- `scripts/audit_bootstrap.py` and a machine-readable
+  `build/audit/weavec-bootstrap.json` report covering source inventory, WIR
+  version declarations, direct calls, reachability, extern use, tests, and
+  parser SDK exports.
+- `test/manifest.txt` as the exact 58-case source/golden/exit-code inventory.
+- `PARSER_SDK_EXPORTS` as the explicit 13-symbol downstream parser-library
+  contract.
+- A local fixed-signature host wrapper in `runtime/portable.c` for portable
+  output-file creation.
+- A permanent CI gate that runs the complete current `weavec` correctness,
+  performance, quantum, and self-host ladders with the frontend source under
+  review.
+
+### Changed
+
+- Migrated all production modules and WIR goldens from WIR v1 to WIR v2.
+- Surface lowering now emits `(core-version 2)`.
+- Updated the default Stage 1 dependency to `weavec1 v0.3.1` and the Stage 0
+  source fallback to `weavec0 v0.4.0`.
+- Reworked `test_all.sh` into one manifest-driven surface-to-native ladder with
+  byte-for-byte WIR comparison and explicit LLVM assembly.
+- CI and release workflows now run the static bootstrap audit and preserve its
+  diagnostics on failure.
+- The build compiles the local portability wrapper with the selected glibc,
+  musl, or macOS toolchain.
+
+### Removed
+
+- Unbuilt `src/string_utils.wir` residue.
+- Unreachable compatibility helpers `copy_node`, `link4`, and `print_indent`.
+- Unused source extern declarations for `atoi`, `snprintf`, and `strlen`.
+
+### Fixed
+
+- Output-file permissions on arm64 macOS are now deterministic. The frontend no
+  longer calls variadic `open` through an incorrect fixed LLVM signature when
+  creating output files.
+- Compact single-line WIR goldens are recognized correctly by the WIR-version
+  audit.
+- Failed audit and build jobs retain actionable logs and JSON reports.
+
 ## [0.2.0] — 2026-07-24
 
 ### Added
@@ -86,7 +129,5 @@ The first public release, published under the repository name `weavefront`.
 
 ### Known limitations
 
-- `src/string_utils.wir` is present but not linked until an active module needs
-  its wrappers.
 - The printer emits compact single-line WIR.
 - Diagnostics refer to byte offsets rather than complete source ranges.
