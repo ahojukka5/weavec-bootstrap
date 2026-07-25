@@ -43,13 +43,14 @@ The repository enforces these boundaries:
 - the parser SDK exports exactly the symbols listed in `PARSER_SDK_EXPORTS`;
 - the current downstream `weavec` full ladder must pass with this source tree.
 
-Run the static audit directly with:
+Run the static audits directly with:
 
 ```bash
+python3 scripts/check_docs.py
 python3 scripts/audit_bootstrap.py
 ```
 
-The audit writes a machine-readable report to
+The bootstrap audit writes a machine-readable report to
 `build/audit/weavec-bootstrap.json`.
 
 ## Dependencies
@@ -84,12 +85,13 @@ Required tools:
 - Bash 4 or newer;
 - LLVM 14 or newer: `clang`, `llvm-as`, and `llvm-link`;
 - `curl`, `tar`, and `sha256sum` for SDK downloads;
-- Python 3 for the multifile driver;
+- Python 3 for audits and the multifile driver;
 - `musl-gcc` for the musl build.
 
 ```bash
 git clone https://github.com/ahojukka5/weavec-bootstrap.git
 cd weavec-bootstrap
+python3 scripts/check_docs.py
 python3 scripts/audit_bootstrap.py
 ./build.sh
 ./test_all.sh
@@ -176,12 +178,13 @@ weavec-bootstrap-vX.Y.Z-linux-x86_64-<libc>/
 
 The installed multifile driver requires Python 3. Release assets include
 `SHA256SUMS`; downstream builds must pin a version and verify the selected
-archive before extraction. See [`docs/RELEASING.md`](docs/RELEASING.md).
+archive before extraction. See [`docs/releasing.md`](docs/releasing.md).
 
 ## CI coverage
 
 CI validates:
 
+- documentation filenames and local links;
 - Linux x86-64 with the glibc `weavec1` SDK;
 - Linux x86-64 with the musl `weavec1` SDK;
 - arm64 macOS using pinned source fallbacks;
@@ -200,10 +203,16 @@ The release workflow separately builds and smokes both static SDK variants.
 
 ## Documentation
 
-- [`docs/ARCHITECTURE.md`](docs/ARCHITECTURE.md)
-- [`docs/RELEASING.md`](docs/RELEASING.md)
+Start with [`docs/index.md`](docs/index.md). The maintained design and release
+contracts are:
+
+- [`docs/architecture.md`](docs/architecture.md)
+- [`docs/releasing.md`](docs/releasing.md)
 - [`CONTRIBUTING.md`](CONTRIBUTING.md)
 - [`CHANGELOG.md`](CHANGELOG.md)
+
+Files under `docs/` use lowercase kebab-case names. Conventional root metadata
+keeps its standard uppercase spelling.
 
 ## License
 

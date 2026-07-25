@@ -39,6 +39,9 @@ jobs:
       - name: Checkout
         uses: actions/checkout@v4
 
+      - name: Check documentation
+        run: python3 scripts/check_docs.py
+
       - name: Audit frozen bootstrap boundaries
         shell: bash
         run: |

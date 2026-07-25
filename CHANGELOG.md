@@ -7,6 +7,15 @@ named `weavefront` through release `v0.1.0`. The format follows
 
 ## [Unreleased]
 
+### Added
+
+- A documentation index and automated checks for lowercase documentation names
+  and valid local Markdown links.
+
+### Changed
+
+- Standardized maintained files under `docs/` on lowercase kebab-case names.
+
 ## [0.3.0] — 2026-07-25
 
 ### Added
@@ -128,8 +137,3 @@ The first public release, published under the repository name `weavefront`.
 - Unpaired multifile fixtures that had no expected WIR files and aborted the
   ladder. Multifile compilation remained supported in that release through the
   then-named `weavefront-cat.sh` helper.
-
-### Known limitations
-
-- The printer emits compact single-line WIR.
-- Diagnostics refer to byte offsets rather than complete source ranges.
