@@ -39,6 +39,12 @@ jobs:
       - name: Checkout
         uses: actions/checkout@v4
 
+      - name: Audit frozen bootstrap boundaries
+        shell: bash
+        run: |
+          set -o pipefail
+          python3 scripts/audit_bootstrap.py 2>&1 | tee audit.log
+
       - name: Install LLVM and SDK tools (Linux)
         if: runner.os == 'Linux'
         run: |
@@ -92,7 +98,9 @@ jobs:
         with:
           name: diagnostics-${{ matrix.name }}-${{ github.run_id }}
           path: |
+            audit.log
             build.log
             test.log
+            build/audit/*.json
           if-no-files-found: warn
           retention-days: 7
