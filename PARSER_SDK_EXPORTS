@@ -1,0 +1,15 @@
+# Stable symbols exported by lib/libweave-sexpr.bc.
+# One symbol per line. These are consumed by the current weavec source compiler.
+lex
+parse
+tree_free
+node_kind
+node_text_start
+node_text_len
+node_first_child
+node_next_sibling
+node_value
+node_list
+node_ident
+node_string
+node_int
