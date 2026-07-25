@@ -16,7 +16,7 @@
 ;   225: v          235: self       239: return_void
 
 (core-module
-  (core-version 1)
+  (core-version 2)
   (decls
 
     ; External memory functions

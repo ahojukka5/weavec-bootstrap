@@ -10,7 +10,7 @@
 ;   - Compact single-line output for small atoms
 
 (core-module
-  (core-version 1)
+  (core-version 2)
   (decls
 
     ; External memory functions

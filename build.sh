@@ -13,12 +13,12 @@ set -euo pipefail
 # Environment overrides:
 #
 #   WEAVEC1_SDK=/path/to/extracted/sdk
-#   WEAVEC1_VERSION=v0.2.0
+#   WEAVEC1_VERSION=v0.3.1
 #   WEAVEC1_LIBC=glibc|musl
 #   WEAVEC1=/path/to/weavec1/source
-#   WEAVEC1_TAG=v0.2.0
+#   WEAVEC1_TAG=v0.3.1
 #   WEAVEC0=/path/to/weavec0/source
-#   WEAVEC0_TAG=v0.2.1
+#   WEAVEC0_TAG=v0.4.0
 # =============================================================================
 
 WEAVEC_BOOTSTRAP_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
@@ -28,13 +28,13 @@ TOOLCHAIN_ENV="$BUILD_DIR/toolchain.env"
 SEXPR_LIBRARY="$BUILD_DIR/libweave-sexpr.bc"
 STACK_SIZE="0x1000000"
 
-WEAVEC1_VERSION="${WEAVEC1_VERSION:-v0.2.0}"
+WEAVEC1_VERSION="${WEAVEC1_VERSION:-v0.3.1}"
 WEAVEC1_TAG="${WEAVEC1_TAG:-$WEAVEC1_VERSION}"
 WEAVEC1_LIBC="${WEAVEC1_LIBC:-glibc}"
 WEAVEC1_RELEASE_BASE="${WEAVEC1_RELEASE_BASE:-https://github.com/ahojukka5/weavec1/releases/download}"
 WEAVEC1_REPO="https://github.com/ahojukka5/weavec1.git"
 
-WEAVEC0_TAG="${WEAVEC0_TAG:-v0.2.1}"
+WEAVEC0_TAG="${WEAVEC0_TAG:-v0.4.0}"
 WEAVEC0_REPO="https://github.com/ahojukka5/weavec0.git"
 
 DEPENDENCY_MODE=""
