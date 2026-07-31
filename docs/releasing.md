@@ -15,9 +15,13 @@ VERSION: X.Y.Z
 tag:     vX.Y.Z
 ```
 
-A normal push to `master` creates the selected release only when it does not
-already exist. Existing `VERSION` releases remain immutable. An explicit tag
-workflow may replace damaged assets for that same tag.
+GitHub Actions may publish all configured packages when credits and runners are
+available, but release correctness must not depend on Actions.
+
+A packaging-only release may add a new host without rebuilding unchanged host
+artifacts. `v0.3.1` adds native macOS packages, while Linux builds continue to
+consume the unchanged `v0.3.0` bootstrap SDK. Downstream resolvers therefore
+select a version that actually contains the requested host package.
 
 ## Release prerequisites
 
@@ -25,15 +29,15 @@ Before changing `VERSION`, confirm:
 
 1. `python3 scripts/audit_bootstrap.py` passes with every source function
    reachable and every extern used;
-2. all 58 manifest cases pass on Linux glibc, Linux musl, and native macOS;
+2. all 58 manifest cases pass on the host being packaged;
 3. the complete current downstream `weavec` ladder passes using this source
    tree;
-4. all four release packaging jobs pass their installed-layout smoke tests;
+4. the selected release package passes its installed-layout smoke tests;
 5. `CHANGELOG.md`, README, architecture, and dependency pins are current;
-6. the selected `weavec1` release and `SHA256SUMS` already exist.
+6. the selected host-specific `weavec1` release and `SHA256SUMS` exist.
 
-Do not update the default `weavec` SDK pin until the new bootstrap release assets
-and checksums are published.
+Do not update the default `weavec` SDK pin until the required bootstrap host
+asset and checksums are published.
 
 ## SDK layout
 
@@ -72,7 +76,7 @@ Use the version selected by the repository:
 version="v$(tr -d '[:space:]' < VERSION)"
 ```
 
-For glibc:
+For an intentionally republished Linux package:
 
 ```sh
 python3 scripts/audit_bootstrap.py
@@ -81,19 +85,7 @@ WEAVEC1_LIBC=glibc ./build.sh
 bash scripts/package-linux-sdk.sh glibc "$version" dist
 ```
 
-For musl:
-
-```sh
-python3 scripts/audit_bootstrap.py
-WEAVEC1_LIBC=musl ./build.sh
-./test_all.sh
-bash scripts/package-linux-sdk.sh musl "$version" dist
-```
-
-The packaging script verifies static linkage, compiles single-file and
-multifile samples through the installed layout, and writes `SDK-MANIFEST`.
-
-On macOS, package the native host architecture the same way:
+For macOS:
 
 ```sh
 python3 scripts/audit_bootstrap.py
@@ -102,9 +94,23 @@ python3 scripts/audit_bootstrap.py
 scripts/package-macos-sdk.sh "$version" dist
 ```
 
+## Manual macOS publication
+
+When GitHub Actions are unavailable, publish the current Mac architecture from a
+clean, locally qualified checkout:
+
+```sh
+scripts/publish-macos-sdk.sh
+```
+
+The script derives `v<VERSION>`, invokes the package script, creates or updates
+the corresponding GitHub Release with `gh`, preserves checksums for existing
+assets, replaces the current architecture archive, and verifies the published
+asset names. Run it separately on each architecture being published.
+
 ## Published assets
 
-A normal release contains:
+A full cross-platform release may contain:
 
 ```text
 weavec-bootstrap-vX.Y.Z-linux-x86_64-glibc.tar.gz
@@ -114,22 +120,17 @@ weavec-bootstrap-vX.Y.Z-macos-x86_64.tar.gz
 SHA256SUMS
 ```
 
-Downstream builds must pin the tag and verify the selected archive against
-`SHA256SUMS` before extraction.
+A platform-addition release may contain only the newly introduced host archives
+and `SHA256SUMS`. Downstream builds must pin a version that contains the selected
+package and verify it against that release's checksums before extraction.
 
-## Publication workflow
-
-`.github/workflows/release.yml` builds both Linux libc variants and both native
-macOS architectures for pull requests, `master`, explicit tags, and manual
-dispatches. On a successful `master` push it publishes the release selected by
-`VERSION` when absent, folding all four archives into one `SHA256SUMS`.
+## Post-publication checklist
 
 After publication:
 
-1. verify that the tag resolves to the merged release commit;
-2. verify both archives and `SHA256SUMS` are present;
-3. update the default `WEAVEC_BOOTSTRAP_VERSION` and source fallback ref in
-   `weavec`;
-4. run the complete `weavec` matrix against the published SDKs;
-5. do not add further features to the released bootstrap line—only bootstrap
-   correctness, security, portability, reproducibility, or packaging fixes.
+1. verify that the tag resolves to the intended release commit;
+2. verify the host archive and `SHA256SUMS` are present;
+3. update the corresponding host-specific bootstrap pin in `weavec`;
+4. run the complete `weavec` ladder against the published SDK;
+5. keep the released bootstrap line limited to correctness, security,
+   portability, reproducibility, or packaging fixes.

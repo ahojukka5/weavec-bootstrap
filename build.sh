@@ -15,7 +15,11 @@ SEXPR_LIBRARY="$BUILD_DIR/libweave-sexpr.bc"
 PORTABLE_RUNTIME_C="$ROOT/runtime/portable.c"
 STACK_SIZE="0x1000000"
 
-WEAVEC1_VERSION="${WEAVEC1_VERSION:-v0.3.2}"
+# v0.3.2 is a packaging-only macOS release. Linux continues to consume the
+# unchanged v0.3.1 SDK. WEAVEC1_VERSION remains an explicit all-host override.
+WEAVEC1_VERSION="${WEAVEC1_VERSION:-}"
+WEAVEC1_LINUX_VERSION="${WEAVEC1_LINUX_VERSION:-v0.3.1}"
+WEAVEC1_MACOS_VERSION="${WEAVEC1_MACOS_VERSION:-v0.3.2}"
 WEAVEC1_LIBC="${WEAVEC1_LIBC:-glibc}"
 WEAVEC1_RELEASE_BASE="${WEAVEC1_RELEASE_BASE:-https://github.com/ahojukka5/weavec1/releases/download}"
 WEAVEC1_SDK_DIR=""
@@ -50,9 +54,16 @@ resolve_sdk_suffix() {
         *) fail "WEAVEC1_LIBC must be glibc or musl" ;;
       esac
       SDK_SUFFIX="linux-x86_64-$WEAVEC1_LIBC"
+      [[ -n "$WEAVEC1_VERSION" ]] || WEAVEC1_VERSION="$WEAVEC1_LINUX_VERSION"
       ;;
-    Darwin:arm64) SDK_SUFFIX="macos-arm64" ;;
-    Darwin:x86_64) SDK_SUFFIX="macos-x86_64" ;;
+    Darwin:arm64)
+      SDK_SUFFIX="macos-arm64"
+      [[ -n "$WEAVEC1_VERSION" ]] || WEAVEC1_VERSION="$WEAVEC1_MACOS_VERSION"
+      ;;
+    Darwin:x86_64)
+      SDK_SUFFIX="macos-x86_64"
+      [[ -n "$WEAVEC1_VERSION" ]] || WEAVEC1_VERSION="$WEAVEC1_MACOS_VERSION"
+      ;;
     *) fail "no published weavec1 SDK contract for $(uname -s)/$(uname -m)" ;;
   esac
 }
@@ -132,6 +143,7 @@ write_toolchain_env() {
     printf 'WEAVE_RUNTIME_C=\n'
     printf 'WEAVE_RUNTIME_LIBC=%q\n' "$WEAVEC1_LIBC"
     printf 'WEAVEC1_SDK=%q\n' "$WEAVEC1_SDK_DIR"
+    printf 'WEAVEC1_VERSION=%q\n' "$WEAVEC1_VERSION"
   } > "$TOOLCHAIN_ENV"
 }
 
@@ -212,7 +224,7 @@ main() {
   compile_modules
   build_sexpr_library
   link_modules
-  log "dependency mode: published SDK ($SDK_SUFFIX)"
+  log "dependency: weavec1 $WEAVEC1_VERSION ($SDK_SUFFIX)"
   log "build complete: $BUILD_DIR/weavec-bootstrap"
   log "parser library: $SEXPR_LIBRARY"
 }

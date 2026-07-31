@@ -14,13 +14,17 @@ named `weavefront` through release `v0.1.0`. The format follows
 - Native macOS SDK packaging for the compiler, multifile driver, and parser
   library, verified with a `libSystem`-only self-containment check and
   published automatically by the release workflow alongside the Linux SDKs.
+- A manual macOS SDK publisher that creates or updates the host release, retains
+  existing asset checksums, and does not require GitHub Actions.
 
 ### Changed
 
 - Standardized maintained files under `docs/` on lowercase kebab-case names.
-- Switched every supported host to the released `weavec1 v0.3.2` SDK and removed
-  implicit Stage 0 and Stage 1 source-chain fallbacks.
-- Bumped the bootstrap SDK version to 0.3.1.
+- Removed implicit Stage 0 and Stage 1 source-chain fallbacks.
+- Selected `weavec1 v0.3.1` for unchanged Linux packages and `v0.3.2` for native
+  macOS packages, with `WEAVEC1_VERSION` retained as an explicit override.
+- Bumped the bootstrap SDK version to 0.3.1 for native macOS package publication;
+  unchanged Linux consumers remain on bootstrap `v0.3.0`.
 
 ## [0.3.0] — 2026-07-25
 

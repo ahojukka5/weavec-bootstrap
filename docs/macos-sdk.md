@@ -11,6 +11,9 @@ The macOS bootstrap build downloads and checksum-verifies the released
 extracted SDK directory passed through `WEAVEC1_SDK`. It never builds
 `weavec0` or `weavec1` as an implicit fallback.
 
+Linux continues to use the unchanged `weavec1 v0.3.1` SDK. The build selects the
+Stage 1 release by host; `WEAVEC1_VERSION` remains an explicit override.
+
 ## Self-containment contract
 
 macOS cannot produce a fully static executable the way the Linux glibc and
@@ -47,10 +50,21 @@ The packaging script verifies the compiler's only linked dependency is
 `libSystem.B.dylib`, then the smoke test lowers one source and one multifile
 input before creating the archive.
 
-## Publish
+## Publish without GitHub Actions
 
-Publication is automatic, same as the Linux SDKs: see
-[Publication workflow](releasing.md#publication-workflow). The `build-macos`
-release job builds and packages both `macos-arm64` and `macos-x86_64` on
-hosted GitHub Actions runners; `publish-release` folds their archives into the
-same `SHA256SUMS` used for the Linux assets.
+From a clean target-Mac checkout containing a qualified build, run:
+
+```sh
+scripts/publish-macos-sdk.sh
+```
+
+The publisher derives `v<VERSION>`, builds the native archive, creates or updates
+the matching GitHub Release, preserves checksums for existing assets, and
+verifies that the archive and `SHA256SUMS` are visible.
+
+Version `v0.3.1` adds macOS bootstrap packages only. The unchanged Linux
+bootstrap SDK remains `v0.3.0`; downstream `weavec` builds select the dependency
+version by host.
+
+The release workflow may publish the same assets when GitHub Actions are
+available, but it is optional and is not part of the manual development path.
