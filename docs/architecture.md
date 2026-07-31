@@ -126,8 +126,9 @@ build/libweave-sexpr.bc
 build/toolchain.env
 ```
 
-Linux x86-64 uses the selected checksum-verified `weavec1` SDK and matching
-static runtime. macOS builds pinned `weavec0` and `weavec1` source fallbacks.
+Every host uses the selected checksum-verified `weavec1` SDK and matching
+runtime: Linux x86-64 links statically, and macOS arm64/x86-64 link natively
+against nothing but `libSystem.B.dylib`. There is no source-chain fallback.
 The executable owns its 16 MiB main-thread stack requirement.
 
 ## Multifile bootstrap
@@ -162,7 +163,7 @@ surface source → WIR v2 → byte-identical golden → LLVM → native executab
 
 - Linux x86-64 glibc SDK;
 - Linux x86-64 musl SDK;
-- arm64 macOS source fallback.
+- native arm64 macOS SDK.
 
 ### Downstream compatibility
 

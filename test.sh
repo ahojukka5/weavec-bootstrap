@@ -59,19 +59,24 @@ case "$WEAVE_RUNTIME_MODE" in
   sdk)
     clang -Wno-override-module -O2 -c "$BUILD_DIR/01_return_42.ll" \
       -o "$BUILD_DIR/01_return_42.o"
-    case "$WEAVE_RUNTIME_LIBC" in
-      glibc)
-        clang -static "$BUILD_DIR/01_return_42.o" "$WEAVE_RUNTIME_LIBRARY" \
-          -o "$BUILD_DIR/01_return_42"
-        ;;
-      musl)
-        command -v musl-gcc >/dev/null 2>&1 \
-          || fail "musl-gcc is required for the musl SDK"
-        musl-gcc -static "$BUILD_DIR/01_return_42.o" \
-          "$WEAVE_RUNTIME_LIBRARY" -o "$BUILD_DIR/01_return_42"
-        ;;
-      *) fail "unknown SDK libc: $WEAVE_RUNTIME_LIBC" ;;
-    esac
+    if [[ "$(uname -s)" == Darwin ]]; then
+      clang "$BUILD_DIR/01_return_42.o" "$WEAVE_RUNTIME_LIBRARY" \
+        -o "$BUILD_DIR/01_return_42"
+    else
+      case "$WEAVE_RUNTIME_LIBC" in
+        glibc)
+          clang -static "$BUILD_DIR/01_return_42.o" "$WEAVE_RUNTIME_LIBRARY" \
+            -o "$BUILD_DIR/01_return_42"
+          ;;
+        musl)
+          command -v musl-gcc >/dev/null 2>&1 \
+            || fail "musl-gcc is required for the musl SDK"
+          musl-gcc -static "$BUILD_DIR/01_return_42.o" \
+            "$WEAVE_RUNTIME_LIBRARY" -o "$BUILD_DIR/01_return_42"
+          ;;
+        *) fail "unknown SDK libc: $WEAVE_RUNTIME_LIBC" ;;
+      esac
+    fi
     ;;
   source)
     [[ -f "$WEAVE_RUNTIME_C" ]] || fail "runtime source not found"

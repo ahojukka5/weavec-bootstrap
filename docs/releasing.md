@@ -1,8 +1,9 @@
 # Releasing weavec-bootstrap
 
 `weavec-bootstrap` publishes static Linux x86-64 SDK archives for glibc and
-musl. A release packages the bootstrap executable, multifile driver, and the
-single parser-library boundary consumed by `weavec`.
+musl, and native macOS SDK archives for arm64 and x86-64. A release packages
+the bootstrap executable, multifile driver, and the single parser-library
+boundary consumed by `weavec`.
 
 ## Version and immutability
 
@@ -24,11 +25,10 @@ Before changing `VERSION`, confirm:
 
 1. `python3 scripts/audit_bootstrap.py` passes with every source function
    reachable and every extern used;
-2. all 58 manifest cases pass on Linux glibc, Linux musl, and macOS source
-   fallback;
+2. all 58 manifest cases pass on Linux glibc, Linux musl, and native macOS;
 3. the complete current downstream `weavec` ladder passes using this source
    tree;
-4. both release packaging jobs pass their installed-layout smoke tests;
+4. all four release packaging jobs pass their installed-layout smoke tests;
 5. `CHANGELOG.md`, README, architecture, and dependency pins are current;
 6. the selected `weavec1` release and `SHA256SUMS` already exist.
 
@@ -59,6 +59,11 @@ The executable includes the local fixed-signature host shim from
 `runtime/portable.c`; this is an implementation detail and does not add another
 SDK file or public runtime dependency.
 
+Each macOS archive (`weavec-bootstrap-vX.Y.Z-macos-<arm64|x86_64>/`) has the
+same layout without a libc suffix. See
+[macOS bootstrap SDK](macos-sdk.md) for the self-containment contract macOS
+uses in place of full static linking.
+
 ## Local validation and packaging
 
 Use the version selected by the repository:
@@ -88,6 +93,15 @@ bash scripts/package-linux-sdk.sh musl "$version" dist
 The packaging script verifies static linkage, compiles single-file and
 multifile samples through the installed layout, and writes `SDK-MANIFEST`.
 
+On macOS, package the native host architecture the same way:
+
+```sh
+python3 scripts/audit_bootstrap.py
+./build.sh
+./test_all.sh
+scripts/package-macos-sdk.sh "$version" dist
+```
+
 ## Published assets
 
 A normal release contains:
@@ -95,6 +109,8 @@ A normal release contains:
 ```text
 weavec-bootstrap-vX.Y.Z-linux-x86_64-glibc.tar.gz
 weavec-bootstrap-vX.Y.Z-linux-x86_64-musl.tar.gz
+weavec-bootstrap-vX.Y.Z-macos-arm64.tar.gz
+weavec-bootstrap-vX.Y.Z-macos-x86_64.tar.gz
 SHA256SUMS
 ```
 
@@ -103,9 +119,10 @@ Downstream builds must pin the tag and verify the selected archive against
 
 ## Publication workflow
 
-`.github/workflows/release.yml` builds both libc variants for pull requests,
-`master`, explicit tags, and manual dispatches. On a successful `master` push it
-publishes the release selected by `VERSION` when absent.
+`.github/workflows/release.yml` builds both Linux libc variants and both native
+macOS architectures for pull requests, `master`, explicit tags, and manual
+dispatches. On a successful `master` push it publishes the release selected by
+`VERSION` when absent, folding all four archives into one `SHA256SUMS`.
 
 After publication:
 

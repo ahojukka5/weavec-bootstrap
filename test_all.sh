@@ -97,15 +97,19 @@ link_test_executable() {
   case "$WEAVE_RUNTIME_MODE" in
     sdk)
       clang -Wno-override-module -O2 -c "$ll_file" -o "$object_file"
-      case "$WEAVE_RUNTIME_LIBC" in
-        glibc)
-          clang -static "$object_file" "$WEAVE_RUNTIME_LIBRARY" -o "$bin_file"
-          ;;
-        musl)
-          musl-gcc -static "$object_file" "$WEAVE_RUNTIME_LIBRARY" -o "$bin_file"
-          ;;
-        *) return 1 ;;
-      esac
+      if [[ "$(uname -s)" == Darwin ]]; then
+        clang "$object_file" "$WEAVE_RUNTIME_LIBRARY" -o "$bin_file"
+      else
+        case "$WEAVE_RUNTIME_LIBC" in
+          glibc)
+            clang -static "$object_file" "$WEAVE_RUNTIME_LIBRARY" -o "$bin_file"
+            ;;
+          musl)
+            musl-gcc -static "$object_file" "$WEAVE_RUNTIME_LIBRARY" -o "$bin_file"
+            ;;
+          *) return 1 ;;
+        esac
+      fi
       ;;
     source)
       clang "$ll_file" "$WEAVE_RUNTIME_C" -o "$bin_file"
