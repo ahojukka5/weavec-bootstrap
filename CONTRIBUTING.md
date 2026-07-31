@@ -69,15 +69,18 @@ repository.
    public contract changes.
 10. Open a focused pull request.
 
-CI validates documentation consistency, Linux glibc, Linux musl, arm64 macOS
-source fallback, both static SDK packages, and the complete current `weavec`
-downstream ladder.
+CI validates documentation consistency, Linux glibc, Linux musl, native arm64
+macOS, both static Linux SDK packages, both native macOS SDK packages, and the
+complete current `weavec` downstream ladder.
 
 ## Dependency changes
 
-The normal Linux dependency is selected with `WEAVEC1_VERSION`,
-`WEAVEC1_LIBC`, and optionally `WEAVEC1_SDK`. Do not update a version pin before
-the corresponding release assets and `SHA256SUMS` exist.
+The published `weavec1` SDK is selected with `WEAVEC1_VERSION`, `WEAVEC1_LIBC`
+(Linux only), and optionally `WEAVEC1_SDK` to use an already extracted SDK
+directory. There is no source-chain fallback: a missing host package is a
+dependency-release failure, not permission to rebuild `weavec0` or `weavec1`
+from source. Do not update a version pin before the corresponding release
+assets and `SHA256SUMS` exist.
 
 A new `weavec-bootstrap` release must exist before changing the default pin in
 `weavec`.

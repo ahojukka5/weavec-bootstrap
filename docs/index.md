@@ -10,6 +10,8 @@ bootstrap boundary.
 
 - [Architecture](architecture.md) — module graph, lowering pipeline, parser SDK,
   portability boundary, and verification model.
+- [macOS bootstrap SDK](macos-sdk.md) — native Stage 1 dependency, package layout,
+  smoke validation, and target-host publication.
 - [Releasing](releasing.md) — SDK layout, validation, publication, and dependency
   ordering.
 - [Contributing](../CONTRIBUTING.md) — change policy and required checks.

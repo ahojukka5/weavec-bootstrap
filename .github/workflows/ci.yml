@@ -25,15 +25,13 @@ jobs:
           - name: linux-musl-sdk
             os: ubuntu-latest
             libc: musl
-          - name: macos-source-fallback
+          - name: macos-sdk
             os: macos-latest
             libc: glibc
 
     env:
-      WEAVEC1_VERSION: v0.3.1
-      WEAVEC1_TAG: v0.3.1
+      WEAVEC1_VERSION: v0.3.2
       WEAVEC1_LIBC: ${{ matrix.libc }}
-      WEAVEC0_TAG: v0.4.0
 
     steps:
       - name: Checkout
@@ -115,8 +113,7 @@ jobs:
     timeout-minutes: 35
     env:
       WEAVEC0_TAG: v0.4.0
-      WEAVEC1_VERSION: v0.3.1
-      WEAVEC1_TAG: v0.3.1
+      WEAVEC1_VERSION: v0.3.2
       WEAVEC1_LIBC: glibc
       WEAVEC_BOOTSTRAP: ${{ github.workspace }}
       WEAVEC_BOOTSTRAP_LIBC: glibc

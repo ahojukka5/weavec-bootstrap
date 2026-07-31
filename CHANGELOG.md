@@ -11,10 +11,16 @@ named `weavefront` through release `v0.1.0`. The format follows
 
 - A documentation index and automated checks for lowercase documentation names
   and valid local Markdown links.
+- Native macOS SDK packaging for the compiler, multifile driver, and parser
+  library, verified with a `libSystem`-only self-containment check and
+  published automatically by the release workflow alongside the Linux SDKs.
 
 ### Changed
 
 - Standardized maintained files under `docs/` on lowercase kebab-case names.
+- Switched every supported host to the released `weavec1 v0.3.2` SDK and removed
+  implicit Stage 0 and Stage 1 source-chain fallbacks.
+- Bumped the bootstrap SDK version to 0.3.1.
 
 ## [0.3.0] — 2026-07-25
 
