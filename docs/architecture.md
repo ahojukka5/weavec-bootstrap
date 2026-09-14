@@ -169,9 +169,12 @@ surface source → WIR v2 → byte-identical golden → LLVM → native executab
 
 ### Downstream compatibility
 
-CI checks out the current `weavec` repository and runs its complete correctness,
-performance, quantum, and self-host ladders using the bootstrap frontend source
-under review.
+CI packages the Linux glibc SDK from this tree after the test job and
+passes it to current `weavec` as `WEAVEC_BOOTSTRAP_SDK`. The downstream
+checkout is `weavec`'s default branch: this seed must keep bootstrapping
+the current compiler. A published bootstrap SDK pin would not test the
+frontend under review. The job still checks that the first lowering
+product is WIR v2.
 
 ## Invariants
 

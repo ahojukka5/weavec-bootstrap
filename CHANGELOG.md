@@ -14,6 +14,9 @@ named `weavefront` through release `v0.1.0`. The format follows
   `name`/`version` metadata, and fails when a unit cannot be extracted. A
   two-file regression asserts that a uniquely named tail function is defined
   once in WIR and links through the bootstrap chain.
+- Downstream CI packages the Linux glibc SDK from the source under review and
+  passes it to current `weavec` as `WEAVEC_BOOTSTRAP_SDK`, instead of
+  downloading the already-published bootstrap release.
 
 ### Added
 

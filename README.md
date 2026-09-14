@@ -41,7 +41,8 @@ The repository enforces these boundaries:
 - every declared extern is used;
 - every test source and WIR golden belongs to exactly one manifest case;
 - the parser SDK exports exactly the symbols listed in `PARSER_SDK_EXPORTS`;
-- the current downstream `weavec` full ladder must pass with this source tree.
+- the current downstream `weavec` full ladder must pass with an SDK
+  packaged from this source tree.
 
 Run the static audits directly with:
 
@@ -190,7 +191,8 @@ CI validates:
 - Linux x86-64 with the musl `weavec1` SDK;
 - arm64 macOS using pinned source fallbacks;
 - all static source, test, reachability, extern, and parser-export invariants;
-- the complete current `weavec` correctness, performance, quantum, and self-host ladders.
+- the complete current `weavec` correctness, performance, quantum, and
+  self-host ladders, using a Linux glibc SDK packaged from this tree.
 
 The release workflow separately builds and smokes both static SDK variants.
 

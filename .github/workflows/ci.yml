@@ -54,6 +54,7 @@ jobs:
             binutils \
             clang \
             curl \
+            file \
             llvm \
             musl-tools
           clang --version
@@ -93,6 +94,23 @@ jobs:
           set -o pipefail
           ./test_all.sh 2>&1 | tee test.log
 
+      - name: Package Linux glibc SDK under review
+        if: matrix.name == 'linux-glibc-sdk'
+        run: |
+          version="v$(tr -d '[:space:]' < VERSION)"
+          archive="$(scripts/package-linux-sdk.sh glibc "$version" dist)"
+          test -s "$archive"
+          printf '%s\n' "$archive"
+
+      - name: Upload Linux glibc SDK under review
+        if: matrix.name == 'linux-glibc-sdk'
+        uses: actions/upload-artifact@v4
+        with:
+          name: weavec-bootstrap-linux-glibc-sdk
+          path: dist/weavec-bootstrap-v*-linux-x86_64-glibc.tar.gz
+          if-no-files-found: error
+          retention-days: 7
+
       - name: Upload failed diagnostics
         if: failure()
         uses: actions/upload-artifact@v4
@@ -112,21 +130,25 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 35
     env:
-      WEAVEC0_TAG: v0.4.0
       WEAVEC1_VERSION: v0.3.2
       WEAVEC1_LIBC: glibc
-      WEAVEC_BOOTSTRAP: ${{ github.workspace }}
-      WEAVEC_BOOTSTRAP_LIBC: glibc
+      WEAVEC_BOOTSTRAP_SDK: ${{ github.workspace }}/bootstrap-sdk
 
     steps:
-      - name: Checkout bootstrap frontend under test
-        uses: actions/checkout@v4
-
       - name: Checkout downstream weavec
         uses: actions/checkout@v4
         with:
+          # Keep the current compiler, not a frozen tag. This seed must still
+          # bootstrap weavec's default branch; a published SDK pin would not
+          # test the frontend under review.
           repository: ahojukka5/weavec
           path: downstream/weavec
+
+      - name: Download bootstrap SDK under review
+        uses: actions/download-artifact@v4
+        with:
+          name: weavec-bootstrap-linux-glibc-sdk
+          path: dist
 
       - name: Install downstream toolchain
         run: |
@@ -136,6 +158,11 @@ jobs:
           llvm-as --version
           llvm-link --version
           python3 --version
+          mkdir -p bootstrap-sdk
+          tar -xzf dist/weavec-bootstrap-v*-linux-x86_64-glibc.tar.gz \
+            --strip-components=1 -C bootstrap-sdk
+          test -x bootstrap-sdk/bin/weavec-bootstrap
+          test -x bootstrap-sdk/bin/weavec-bootstrap-cat
 
       - name: Build and test downstream weavec
         shell: bash
