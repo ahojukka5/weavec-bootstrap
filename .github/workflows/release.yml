@@ -1,12 +1,13 @@
 # SPDX-License-Identifier: Apache-2.0
 name: release
 
+# Release packaging is post-merge/release infrastructure. The portfolio has no
+# self-hosted macOS runner pool, so qualification publishes the supported Linux
+# glibc/musl SDK artifacts only.
 on:
   push:
     branches: [master]
     tags: ["v*"]
-  pull_request:
-    branches: [master]
   workflow_dispatch:
 
 permissions:
@@ -19,7 +20,7 @@ concurrency:
 jobs:
   build-linux:
     name: Linux x86-64 (${{ matrix.libc }})
-    runs-on: ubuntu-latest
+    runs-on: self-hosted
     timeout-minutes: 25
     strategy:
       fail-fast: false
@@ -107,97 +108,13 @@ jobs:
           if-no-files-found: warn
           retention-days: 7
 
-  build-macos:
-    name: macOS (${{ matrix.arch }})
-    runs-on: ${{ matrix.os }}
-    timeout-minutes: 25
-    strategy:
-      fail-fast: false
-      matrix:
-        include:
-          - os: macos-15
-            arch: arm64
-          - os: macos-15-intel
-            arch: x86_64
-
-    env:
-      WEAVEC1_VERSION: v0.3.2
-
-    steps:
-      - name: Checkout
-        uses: actions/checkout@v4
-
-      - name: Audit frozen bootstrap boundaries
-        shell: bash
-        run: |
-          set -o pipefail
-          python3 scripts/audit_bootstrap.py 2>&1 | tee audit.log
-
-      - name: Install LLVM toolchain
-        run: |
-          brew install llvm
-          echo "$(brew --prefix llvm)/bin" >> "$GITHUB_PATH"
-
-      - name: Show toolchain versions
-        run: |
-          clang --version
-          llvm-as --version
-          llvm-link --version
-
-      - name: Build bootstrap frontend and run the full ladder
-        shell: bash
-        run: |
-          set -o pipefail
-          {
-            ./build.sh
-            ./test_all.sh
-          } 2>&1 | tee release-build.log
-
-      - name: Select archive version
-        id: version
-        shell: bash
-        run: |
-          if [[ "$GITHUB_REF" == refs/tags/* ]]; then
-            version="$GITHUB_REF_NAME"
-          elif [[ "$GITHUB_REF" == refs/heads/master ]]; then
-            version="v$(tr -d '[:space:]' < VERSION)"
-          else
-            version="git-${GITHUB_SHA::12}"
-          fi
-          printf 'value=%s\n' "$version" >> "$GITHUB_OUTPUT"
-
-      - name: Build native macOS SDK archive
-        run: |
-          scripts/package-macos-sdk.sh \
-            "${{ steps.version.outputs.value }}" \
-            dist
-
-      - name: Upload SDK archive
-        uses: actions/upload-artifact@v4
-        with:
-          name: weavec-bootstrap-macos-${{ matrix.arch }}
-          path: dist/*.tar.gz
-          if-no-files-found: error
-          retention-days: 14
-
-      - name: Upload failed diagnostics
-        if: failure()
-        uses: actions/upload-artifact@v4
-        with:
-          name: release-diagnostics-macos-${{ matrix.arch }}-${{ github.run_id }}
-          path: |
-            audit.log
-            release-build.log
-          if-no-files-found: warn
-          retention-days: 7
-
   publish-release:
     name: Publish GitHub Release
     if: >-
       startsWith(github.ref, 'refs/tags/v') ||
       (github.event_name == 'push' && github.ref == 'refs/heads/master')
-    needs: [build-linux, build-macos]
-    runs-on: ubuntu-latest
+    needs: [build-linux]
+    runs-on: self-hosted
     permissions:
       contents: write
 
@@ -238,7 +155,7 @@ jobs:
           steps.release.outputs.replace == 'true'
         uses: actions/download-artifact@v4
         with:
-          pattern: weavec-bootstrap-*
+          pattern: weavec-bootstrap-linux-x86_64-*
           path: dist
           merge-multiple: true
 
