@@ -55,14 +55,11 @@ The bootstrap audit writes a machine-readable report to
 
 ## Dependencies
 
-Linux x86-64 builds consume the checksum-verified `weavec1 v0.3.1` SDK by
-default. The selected archive provides both the compiler and matching static
-runtime library.
-
-macOS uses pinned source fallbacks:
-
-- `weavec1 v0.3.1`;
-- `weavec0 v0.4.0`.
+Every supported host consumes the checksum-verified `weavec1 v0.3.2` SDK by
+default. Linux x86-64 selects glibc or musl with `WEAVEC1_LIBC`. macOS uses the
+native `weavec1` archive for the host architecture. There is no source-chain
+fallback: a missing host package is a dependency-release failure, not
+permission to rebuild `weavec0` or `weavec1` from source.
 
 Important overrides:
 
@@ -70,13 +67,9 @@ Important overrides:
 WEAVEC1_SDK=/path/to/extracted/sdk
 WEAVEC1_VERSION=vX.Y.Z
 WEAVEC1_LIBC=glibc|musl
-WEAVEC1=/path/to/weavec1/source
-WEAVEC1_TAG=vX.Y.Z
-WEAVEC0=/path/to/weavec0/source
-WEAVEC0_TAG=vX.Y.Z
 ```
 
-Explicit source and SDK paths take precedence over published downloads.
+`WEAVEC1_SDK` takes precedence over a published download.
 
 ## Build and test
 
@@ -144,7 +137,8 @@ bootstrap build.
 
 ## Published SDK
 
-Releases publish static Linux x86-64 archives for glibc and musl:
+Releases publish four archives: Linux x86-64 glibc, Linux x86-64 musl, macOS
+arm64, and macOS x86-64. The Linux layout is:
 
 ```text
 weavec-bootstrap-vX.Y.Z-linux-x86_64-<libc>/
@@ -159,9 +153,11 @@ weavec-bootstrap-vX.Y.Z-linux-x86_64-<libc>/
 └── NOTICE
 ```
 
-The installed multifile driver requires Python 3. Release assets include
-`SHA256SUMS`; downstream builds must pin a version and verify the selected
-archive before extraction. See [`docs/releasing.md`](docs/releasing.md).
+macOS archives use the same files without a libc suffix. See
+[`docs/macos-sdk.md`](docs/macos-sdk.md). The installed multifile driver
+requires Python 3. Release assets include `SHA256SUMS`; downstream builds must
+pin a version and verify the selected archive before extraction. See
+[`docs/releasing.md`](docs/releasing.md).
 
 ## CI coverage
 
@@ -170,12 +166,12 @@ CI validates:
 - documentation filenames and local links;
 - Linux x86-64 with the glibc `weavec1` SDK;
 - Linux x86-64 with the musl `weavec1` SDK;
-- arm64 macOS using pinned source fallbacks;
+- native macOS arm64 and x86-64 with the `weavec1` SDK;
 - all static source, test, reachability, and extern invariants;
 - the complete current `weavec` correctness, performance, quantum, and
   self-host ladders, using a Linux glibc SDK packaged from this tree.
 
-The release workflow separately builds and smokes both static SDK variants.
+The release workflow separately builds and smokes all four SDK archives.
 
 ## Non-goals
 
@@ -183,7 +179,6 @@ The release workflow separately builds and smokes both static SDK variants.
 - General language development.
 - Type inference, macros, package resolution, or optimization.
 - Preserving source comments through lowering.
-- Publishing non-Linux binary SDKs at this stage.
 
 ## Documentation
 
@@ -191,6 +186,7 @@ Start with [`docs/index.md`](docs/index.md). The maintained design and release
 contracts are:
 
 - [`docs/architecture.md`](docs/architecture.md)
+- [`docs/macos-sdk.md`](docs/macos-sdk.md)
 - [`docs/releasing.md`](docs/releasing.md)
 - [`CONTRIBUTING.md`](CONTRIBUTING.md)
 - [`CHANGELOG.md`](CHANGELOG.md)

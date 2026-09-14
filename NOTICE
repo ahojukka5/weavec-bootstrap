@@ -8,7 +8,9 @@ written in WIR.
 
 The repository was formerly named `weavefront`.
 
+This repository consumes published `weavec1` SDK archives. `weavec0` remains
+in the historical compiler chain and is not a build input here.
+
 Upstream:    https://github.com/ahojukka5/weavec-bootstrap
-Dependency:  https://github.com/ahojukka5/weavec0  (Stage 0 bootstrap SDK)
 Dependency:  https://github.com/ahojukka5/weavec1  (Stage 1 compiler SDK)
 Downstream:  https://github.com/ahojukka5/weavec   (self-hosted compiler)
