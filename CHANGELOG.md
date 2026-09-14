@@ -16,7 +16,8 @@ named `weavefront` through release `v0.1.0`. The format follows
   once in WIR and links through the bootstrap chain.
 - Downstream CI packages the Linux glibc SDK from the source under review and
   passes it to current `weavec` as `WEAVEC_BOOTSTRAP_SDK`, instead of
-  downloading the already-published bootstrap release.
+  downloading the already-published bootstrap release. The job now asserts
+  that log line and refuses a published-SDK download.
 
 ### Added
 

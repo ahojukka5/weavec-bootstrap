@@ -98,9 +98,8 @@ jobs:
         if: matrix.name == 'linux-glibc-sdk'
         run: |
           version="v$(tr -d '[:space:]' < VERSION)"
-          archive="$(scripts/package-linux-sdk.sh glibc "$version" dist)"
-          test -s "$archive"
-          printf '%s\n' "$archive"
+          scripts/package-linux-sdk.sh glibc "$version" dist
+          test -s "dist/weavec-bootstrap-${version}-linux-x86_64-glibc.tar.gz"
 
       - name: Upload Linux glibc SDK under review
         if: matrix.name == 'linux-glibc-sdk'
@@ -128,7 +127,7 @@ jobs:
     name: downstream weavec full ladder
     needs: test
     runs-on: ubuntu-latest
-    timeout-minutes: 35
+    timeout-minutes: 60
     env:
       WEAVEC1_VERSION: v0.3.2
       WEAVEC1_LIBC: glibc
@@ -154,15 +153,28 @@ jobs:
         run: |
           sudo apt-get update
           sudo apt-get install -y clang curl git llvm python3
+          for tool in llvm-as llvm-link llc; do
+            if command -v "$tool" >/dev/null 2>&1; then
+              continue
+            fi
+            versioned="$(command -v "${tool}-18" || command -v "${tool}-17" || true)"
+            [[ -n "$versioned" ]] || {
+              echo "missing $tool" >&2
+              exit 1
+            }
+            sudo ln -sf "$versioned" "/usr/local/bin/$tool"
+          done
           clang --version
           llvm-as --version
           llvm-link --version
+          llc --version | head -2
           python3 --version
           mkdir -p bootstrap-sdk
-          tar -xzf dist/weavec-bootstrap-v*-linux-x86_64-glibc.tar.gz \
-            --strip-components=1 -C bootstrap-sdk
+          archive="$(echo dist/weavec-bootstrap-v*-linux-x86_64-glibc.tar.gz)"
+          tar -xzf "$archive" --strip-components=1 -C bootstrap-sdk
           test -x bootstrap-sdk/bin/weavec-bootstrap
           test -x bootstrap-sdk/bin/weavec-bootstrap-cat
+          test -f bootstrap-sdk/bin/extract_program_decls.py
 
       - name: Build and test downstream weavec
         shell: bash
@@ -172,6 +184,11 @@ jobs:
             cd downstream/weavec
             ./test-all.sh
           ) 2>&1 | tee downstream-weavec.log
+          grep -F 'using WEAVEC_BOOTSTRAP_SDK:' downstream-weavec.log
+          if grep -E 'downloading weavec-bootstrap SDK' downstream-weavec.log; then
+            echo "downstream weavec downloaded a published bootstrap SDK" >&2
+            exit 1
+          fi
 
       - name: Verify WIR v2 bootstrap product
         run: |

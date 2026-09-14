@@ -92,8 +92,8 @@ if readelf -l "$COMPILER" | grep -q 'INTERP'; then
   exit 1
 fi
 
-file "$COMPILER"
-file "$PARSER"
+file "$COMPILER" >&2
+file "$PARSER" >&2
 
 cat > "$PACKAGE_DIR/SDK-MANIFEST" <<EOF
 name=weavec-bootstrap
