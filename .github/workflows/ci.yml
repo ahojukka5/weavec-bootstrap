@@ -85,7 +85,7 @@ jobs:
         run: |
           test -x build/weavec-bootstrap
           test -s build/weavec-bootstrap.bc
-          test -s build/libweave-sexpr.bc
+          test ! -e build/libweave-sexpr.bc
           test ! -e build/weavefront
 
       - name: Run weavec-bootstrap test ladder
@@ -175,6 +175,7 @@ jobs:
           test -x bootstrap-sdk/bin/weavec-bootstrap
           test -x bootstrap-sdk/bin/weavec-bootstrap-cat
           test -f bootstrap-sdk/bin/extract_program_decls.py
+          test ! -e bootstrap-sdk/lib/libweave-sexpr.bc
 
       - name: Build and test downstream weavec
         shell: bash

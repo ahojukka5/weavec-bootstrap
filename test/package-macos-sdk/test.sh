@@ -15,7 +15,6 @@ printf 'license\n' > "$CHECKOUT/LICENSE"
 printf 'notice\n' > "$CHECKOUT/NOTICE"
 printf '(program)\n' > "$CHECKOUT/test/01_return_42.weave"
 printf '(program)\n' > "$CHECKOUT/test/02_return_constant.weave"
-printf 'parser\n' > "$CHECKOUT/build/libweave-sexpr.bc"
 
 cat > "$CHECKOUT/build/weavec-bootstrap" <<'EOF'
 #!/usr/bin/env bash
@@ -58,9 +57,17 @@ for path in \
   bin/weavec-bootstrap \
   bin/weavec-bootstrap-cat \
   bin/extract_program_decls.py \
-  lib/libweave-sexpr.bc \
   SDK-MANIFEST; do
   tar -tzf "$archive" | grep -Fq \
     "weavec-bootstrap-v0.3.1-macos-arm64/$path"
 done
+if tar -tzf "$archive" | grep -F '/lib/'; then
+  printf 'package-macos-sdk: leftover parser library in archive\n' >&2
+  exit 1
+fi
+if tar -xOf "$archive" \
+  weavec-bootstrap-v0.3.1-macos-arm64/SDK-MANIFEST | grep -F parser_library; then
+  printf 'package-macos-sdk: leftover parser_library in SDK-MANIFEST\n' >&2
+  exit 1
+fi
 printf 'package-macos-sdk: bootstrap package harness passed\n'

@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 # SPDX-License-Identifier: Apache-2.0
-"""Audit the frozen weavec-bootstrap source, test, and parser SDK boundaries."""
+"""Audit the frozen weavec-bootstrap source and test boundaries."""
 
 from __future__ import annotations
 
@@ -20,7 +20,6 @@ BUILD_SCRIPT = ROOT / "build.sh"
 MANIFEST = TEST_DIR / "manifest.txt"
 EXPORTS_FILE = ROOT / "PARSER_SDK_EXPORTS"
 DEFAULT_REPORT = ROOT / "build" / "audit" / "weavec-bootstrap.json"
-PARSER_MODULES = {"sexpr_tokens", "sexpr_tree", "sexpr_lexer", "sexpr_parser"}
 CALL_FORMS = {"call_bool", "call_i32", "call_i64", "call_ptr", "call_void"}
 MODULE_RE = re.compile(r"^[A-Za-z_][A-Za-z0-9_]*$")
 TEST_RE = re.compile(r"^[0-9]{2}_[A-Za-z0-9_]+$")
@@ -185,25 +184,13 @@ def check_test_inventory(cases: dict[str, int]) -> list[str]:
     return errors
 
 
-def read_exports() -> tuple[set[str], list[str]]:
-    exports: set[str] = set()
-    errors: list[str] = []
-    if not EXPORTS_FILE.is_file():
-        return exports, ["PARSER_SDK_EXPORTS: file is missing"]
-
-    for lineno, line in enumerate(EXPORTS_FILE.read_text(encoding="utf-8").splitlines(), 1):
-        symbol = line.split("#", 1)[0].strip()
-        if not symbol:
-            continue
-        if not MODULE_RE.fullmatch(symbol):
-            errors.append(f"PARSER_SDK_EXPORTS:{lineno}: invalid symbol `{symbol}`")
-            continue
-        if symbol in exports:
-            errors.append(f"PARSER_SDK_EXPORTS:{lineno}: duplicate symbol `{symbol}`")
-        exports.add(symbol)
-    if not exports:
-        errors.append("PARSER_SDK_EXPORTS: no exports found")
-    return exports, errors
+def check_retired_parser_sdk() -> list[str]:
+    if EXPORTS_FILE.is_file():
+        return [
+            "PARSER_SDK_EXPORTS: leftover parser-library inventory; "
+            "weavec consumes the bootstrap command, not parser bitcode"
+        ]
+    return []
 
 
 def tokenize(text: str, path: Path) -> list[str | StringLiteral]:
@@ -338,7 +325,7 @@ def direct_calls(function: list[SExpr]) -> set[str]:
     return calls
 
 
-def check_reachability(exports: set[str], report_path: Path) -> list[str]:
+def check_reachability(report_path: Path) -> list[str]:
     errors: list[str] = []
     forms_by_file: dict[Path, list[SExpr]] = {}
     for path in sorted(SRC_DIR.glob("*.wir")):
@@ -352,15 +339,9 @@ def check_reachability(exports: set[str], report_path: Path) -> list[str]:
     functions, externs, declaration_errors = collect_declarations(forms_by_file)
     errors.extend(declaration_errors)
 
-    roots = {"main"} | exports
+    roots = {"main"}
     for root in sorted(roots - functions.keys()):
         errors.append(f"missing reachability root `{root}`")
-    for name in sorted(exports & functions.keys()):
-        module = functions[name][0].stem
-        if module not in PARSER_MODULES:
-            errors.append(
-                f"PARSER_SDK_EXPORTS: `{name}` is defined outside parser modules in {module}"
-            )
 
     graph = {name: direct_calls(node) for name, (_, node) in functions.items()}
     unresolved: dict[str, list[str]] = {}
@@ -393,7 +374,6 @@ def check_reachability(exports: set[str], report_path: Path) -> list[str]:
     report = {
         "format": "weavec-bootstrap-audit-v1",
         "roots": sorted(roots),
-        "parser_exports": sorted(exports),
         "source_files": len(forms_by_file),
         "function_count": len(functions),
         "reachable_count": len(reachable),
@@ -429,9 +409,8 @@ def main() -> int:
     cases, manifest_errors = parse_manifest()
     errors.extend(manifest_errors)
     errors.extend(check_test_inventory(cases))
-    exports, export_errors = read_exports()
-    errors.extend(export_errors)
-    errors.extend(check_reachability(exports, report))
+    errors.extend(check_retired_parser_sdk())
+    errors.extend(check_reachability(report))
 
     if errors:
         for error in errors:
@@ -444,8 +423,7 @@ def main() -> int:
         "Bootstrap audit passed: "
         f"{data['reachable_count']}/{data['function_count']} functions reachable; "
         f"{data['extern_count']} externs used; "
-        f"{len(cases)} manifest cases; "
-        f"{len(exports)} parser SDK exports."
+        f"{len(cases)} manifest cases."
     )
     print(f"audit report: {report.relative_to(ROOT)}")
     return 0

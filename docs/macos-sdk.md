@@ -26,7 +26,6 @@ weavec-bootstrap-vX.Y.Z-macos-<arm64|x86_64>/
 ├── bin/weavec-bootstrap
 ├── bin/weavec-bootstrap-cat
 ├── bin/extract_program_decls.py
-├── lib/libweave-sexpr.bc
 ├── SDK-MANIFEST
 ├── VERSION
 ├── README.md
@@ -34,8 +33,7 @@ weavec-bootstrap-vX.Y.Z-macos-<arm64|x86_64>/
 └── NOTICE
 ```
 
-The package exposes the same compiler, multifile driver, and parser-library
-boundary as the Linux SDKs.
+The package exposes the same compiler and multifile driver as the Linux SDKs.
 
 ## Build and package
 

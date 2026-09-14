@@ -11,7 +11,6 @@ BUILD_DIR="$ROOT/build"
 VENDOR_DIR="$BUILD_DIR/vendor"
 DOWNLOAD_DIR="$BUILD_DIR/downloads"
 TOOLCHAIN_ENV="$BUILD_DIR/toolchain.env"
-SEXPR_LIBRARY="$BUILD_DIR/libweave-sexpr.bc"
 PORTABLE_RUNTIME_C="$ROOT/runtime/portable.c"
 STACK_SIZE="0x1000000"
 
@@ -148,17 +147,6 @@ compile_modules() {
   done
 }
 
-build_sexpr_library() {
-  log "linking reusable S-expression parser library"
-  llvm-link \
-    "$BUILD_DIR/sexpr_tokens.ll" \
-    "$BUILD_DIR/sexpr_tree.ll" \
-    "$BUILD_DIR/sexpr_lexer.ll" \
-    "$BUILD_DIR/sexpr_parser.ll" \
-    -o "$SEXPR_LIBRARY" || fail "failed to link $SEXPR_LIBRARY"
-  [[ -s "$SEXPR_LIBRARY" ]] || fail "empty S-expression parser library"
-}
-
 link_executable() {
   local object="$BUILD_DIR/weavec-bootstrap.o"
   local portable_object="$BUILD_DIR/weavec-bootstrap-portable.o"
@@ -210,11 +198,9 @@ main() {
   ensure_sdk
   write_toolchain_env
   compile_modules
-  build_sexpr_library
   link_modules
   log "dependency mode: published SDK ($SDK_SUFFIX)"
   log "build complete: $BUILD_DIR/weavec-bootstrap"
-  log "parser library: $SEXPR_LIBRARY"
 }
 
 main "$@"

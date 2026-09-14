@@ -18,7 +18,7 @@ weavec0 → weavec1 → weavec-bootstrap → weavec
 |---|---|
 | [`weavec0`](https://github.com/ahojukka5/weavec0) | Minimal hand-written Stage 0 seed and runtime SDK. |
 | [`weavec1`](https://github.com/ahojukka5/weavec1) | Stable WIR v2 backend and Stage 1 SDK. |
-| **`weavec-bootstrap`** | Frozen surface-Weave-to-WIR-v2 bootstrap frontend and parser SDK. |
+| **`weavec-bootstrap`** | Frozen surface-Weave-to-WIR-v2 bootstrap frontend. |
 | [`weavec`](https://github.com/ahojukka5/weavec) | User-facing self-hosted compiler and language development. |
 
 Language evolution belongs in `weavec`. This repository changes only when the
@@ -37,10 +37,9 @@ The repository enforces these boundaries:
 - every production `src/*.wir` file is listed exactly once in `build.sh`;
 - every production module declares `(core-version 2)` exactly once;
 - every direct WIR call resolves to a source function or declared extern;
-- every source function is reachable from `main` or a documented parser SDK export;
+- every source function is reachable from `main`;
 - every declared extern is used;
 - every test source and WIR golden belongs to exactly one manifest case;
-- the parser SDK exports exactly the symbols listed in `PARSER_SDK_EXPORTS`;
 - the current downstream `weavec` full ladder must pass with an SDK
   packaged from this source tree.
 
@@ -125,7 +124,6 @@ surface Weave
 ```text
 build/weavec-bootstrap       surface Weave → WIR v2 executable
 build/weavec-bootstrap.bc    complete frontend LLVM bitcode
-build/libweave-sexpr.bc      reusable parser-library boundary
 build/toolchain.env          resolved compiler/runtime configuration
 ```
 
@@ -133,21 +131,6 @@ The executable links a tiny local host shim from `runtime/portable.c`. The shim
 provides fixed-signature wrappers for host APIs whose native C interfaces are
 variadic. This keeps arm64 macOS, glibc, and musl on one stable ABI without
 expanding the Stage 0 runtime.
-
-## Parser SDK
-
-The parser library combines:
-
-```text
-src/sexpr_tokens.wir
-src/sexpr_tree.wir
-src/sexpr_lexer.wir
-src/sexpr_parser.wir
-```
-
-Its 13 public symbols are listed in `PARSER_SDK_EXPORTS`. Downstream stages link
-`libweave-sexpr.bc` as one unit and must not depend on individual generated
-module files.
 
 ## Multifile bootstrap
 
@@ -169,8 +152,6 @@ weavec-bootstrap-vX.Y.Z-linux-x86_64-<libc>/
 │   ├── weavec-bootstrap
 │   ├── weavec-bootstrap-cat
 │   └── extract_program_decls.py
-├── lib/
-│   └── libweave-sexpr.bc
 ├── SDK-MANIFEST
 ├── VERSION
 ├── README.md
@@ -190,7 +171,7 @@ CI validates:
 - Linux x86-64 with the glibc `weavec1` SDK;
 - Linux x86-64 with the musl `weavec1` SDK;
 - arm64 macOS using pinned source fallbacks;
-- all static source, test, reachability, extern, and parser-export invariants;
+- all static source, test, reachability, and extern invariants;
 - the complete current `weavec` correctness, performance, quantum, and
   self-host ladders, using a Linux glibc SDK packaged from this tree.
 

@@ -108,23 +108,6 @@
 
         (return (local_get tree))))
 
-    ; Free a tree
-    (fn tree_free
-      (params (tree ptr))
-      (returns void)
-      (do
-        (if
-          (condition (ne_ptr (param_get tree) (const_null)))
-          (then (do
-            (let nodes ptr (load_ptr (param_get tree)))
-            (if
-              (condition (ne_ptr (local_get nodes) (const_null)))
-              (then (do (call_void free (local_get nodes))))
-              (else (do)))
-            (call_void free (param_get tree))))
-          (else (do)))
-        (return_void)))
-
     ; Get node count
     (fn tree_count
       (params (tree ptr))

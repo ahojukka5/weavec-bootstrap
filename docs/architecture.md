@@ -63,43 +63,25 @@ keyword prefix plus original source bytes. It emits `(core-version 2)` and
 preserves explicit WIR-like function bodies rather than introducing hidden
 control flow or inferred types.
 
-## Executable and parser-library roots
+## Executable reachability root
 
-The repository has two intentional reachability root sets:
+The repository has one intentional reachability root: `main`, which owns the
+standalone `weavec-bootstrap` executable. Parser modules
+(`sexpr_tokens`, `sexpr_tree`, `sexpr_lexer`, `sexpr_parser`) remain part of
+that executable. They are not a second public product.
 
-1. `main`, which owns the standalone `weavec-bootstrap` executable;
-2. the symbols in `PARSER_SDK_EXPORTS`, which form the public downstream parser
-   library used by `weavec`.
-
-Every source function must be reachable from at least one of those roots. The
-audit rejects unresolved direct calls, unreachable functions, and unused extern
-declarations. Its JSON report is written to:
+Every source function must be reachable from `main`. The audit rejects
+unresolved direct calls, unreachable functions, unused extern declarations, and
+a leftover `PARSER_SDK_EXPORTS` inventory. Its JSON report is written to:
 
 ```text
 build/audit/weavec-bootstrap.json
 ```
 
-## Reusable parser SDK
-
-`build.sh` links the generated forms of:
-
-```text
-sexpr_tokens.ll
-sexpr_tree.ll
-sexpr_lexer.ll
-sexpr_parser.ll
-```
-
-into:
-
-```text
-build/libweave-sexpr.bc
-```
-
-The library is one named, versioned boundary. Downstream code must not reach
-into this repository for individual generated `.ll` files. The exact exported
-symbol inventory is maintained in `PARSER_SDK_EXPORTS` and verified against the
-source definitions.
+`weavec` consumes this repository through the bootstrap command and the
+multifile driver only. Final `weavec` obtains lex, parse, tree accessors, and
+token/node helpers from `src/parser/*.weave`. It does not link lower-stage
+parser bitcode.
 
 ## Host portability boundary
 
@@ -122,7 +104,6 @@ Stage 0 runtime ABI is not expanded for a frontend-only portability detail.
 ```text
 build/weavec-bootstrap
 build/weavec-bootstrap.bc
-build/libweave-sexpr.bc
 build/toolchain.env
 ```
 
@@ -149,9 +130,8 @@ The repository enforces four layers:
 - exactly one WIR v2 declaration per production module;
 - exact test source/golden/manifest inventory;
 - resolved direct calls;
-- full function reachability from executable and parser SDK roots;
-- all extern declarations used;
-- exact parser SDK export inventory.
+- full function reachability from `main`;
+- all extern declarations used.
 
 ### Frontend ladder
 
@@ -181,7 +161,7 @@ product is WIR v2.
 - The same source produces byte-identical WIR.
 - Lowering emits only admitted WIR v2.
 - Production and test inventories are explicit and complete.
-- Parser support is exported through one named library and one symbol list.
+- Parser modules stay inside the bootstrap executable.
 - Host ABI details stay behind fixed-signature local wrappers.
 - A change is not compatible unless the real downstream compiler still builds
   and self-hosts.

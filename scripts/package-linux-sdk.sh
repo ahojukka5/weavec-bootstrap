@@ -39,11 +39,9 @@ ARCHIVE="$ARCHIVE_DIR/$PACKAGE_NAME.tar.gz"
 COMPILER_SOURCE="$ROOT/build/weavec-bootstrap"
 HELPER_SOURCE="$ROOT/weavec-bootstrap-cat.sh"
 EXTRACT_SOURCE="$ROOT/scripts/extract_program_decls.py"
-PARSER_SOURCE="$ROOT/build/libweave-sexpr.bc"
 COMPILER="$PACKAGE_DIR/bin/weavec-bootstrap"
 HELPER="$PACKAGE_DIR/bin/weavec-bootstrap-cat"
 EXTRACT="$PACKAGE_DIR/bin/extract_program_decls.py"
-PARSER="$PACKAGE_DIR/lib/libweave-sexpr.bc"
 SMOKE_WIR="$RELEASE_BUILD/smoke.wir"
 MULTIFILE_WIR="$RELEASE_BUILD/multifile.wir"
 
@@ -72,18 +70,13 @@ require_tool tar
   printf 'missing declaration extractor: %s\n' "$EXTRACT_SOURCE" >&2
   exit 1
 }
-[[ -s "$PARSER_SOURCE" ]] || {
-  printf 'missing parser library: %s\n' "$PARSER_SOURCE" >&2
-  exit 1
-}
 
 rm -rf "$RELEASE_BUILD"
-mkdir -p "$PACKAGE_DIR/bin" "$PACKAGE_DIR/lib" "$ARCHIVE_DIR"
+mkdir -p "$PACKAGE_DIR/bin" "$ARCHIVE_DIR"
 
 cp "$COMPILER_SOURCE" "$COMPILER"
 cp "$HELPER_SOURCE" "$HELPER"
 cp "$EXTRACT_SOURCE" "$EXTRACT"
-cp "$PARSER_SOURCE" "$PARSER"
 chmod 0755 "$COMPILER" "$HELPER"
 
 if readelf -l "$COMPILER" | grep -q 'INTERP'; then
@@ -93,7 +86,6 @@ if readelf -l "$COMPILER" | grep -q 'INTERP'; then
 fi
 
 file "$COMPILER" >&2
-file "$PARSER" >&2
 
 cat > "$PACKAGE_DIR/SDK-MANIFEST" <<EOF
 name=weavec-bootstrap
@@ -102,7 +94,6 @@ platform=linux-x86_64
 libc=$LIBC
 compiler=bin/weavec-bootstrap
 multifile_driver=bin/weavec-bootstrap-cat
-parser_library=lib/libweave-sexpr.bc
 weavec1_version=${WEAVEC1_VERSION:-v0.2.0}
 EOF
 

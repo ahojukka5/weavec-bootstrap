@@ -12,10 +12,9 @@ repository.
 - **Determinism is required.** The same `.weave` input must produce byte-identical
   `.wir` output across supported hosts.
 - **Inventories are explicit.** Production modules belong in the `build.sh`
-  `MODULES` array. Test cases belong in `test/manifest.txt`. Parser-library
-  exports belong in `PARSER_SDK_EXPORTS`.
+  `MODULES` array. Test cases belong in `test/manifest.txt`.
 - **No dead bootstrap surface.** Every source function must be reachable from
-  `main` or an approved parser SDK export, and every extern must be used.
+  `main`, and every extern must be used.
 - **No feature without an end-to-end fixture.** Add a matching source, WIR
   golden, and manifest entry.
 - **Keep the surface close to WIR.** Avoid inference, macro expansion,
@@ -44,8 +43,7 @@ repository.
    component.
 4. Add or update `test/NN_<name>.weave`, its `.expected.wir`, and
    `test/manifest.txt` when behavior changes.
-5. Update `PARSER_SDK_EXPORTS` only when the downstream binary interface changes.
-6. Run:
+5. Run:
 
    ```sh
    python3 scripts/check_docs.py
@@ -54,20 +52,18 @@ repository.
    ./test_all.sh
    ```
 
-7. Confirm these artifacts exist:
+6. Confirm these artifacts exist:
 
    ```text
    build/weavec-bootstrap
    build/weavec-bootstrap.bc
-   build/libweave-sexpr.bc
    build/audit/weavec-bootstrap.json
    ```
 
-8. Review WIR goldens, executable exit codes, reachability changes, and SDK
-   exports.
-9. Update README, architecture, changelog, and dependency documentation when a
+7. Review WIR goldens, executable exit codes, and reachability changes.
+8. Update README, architecture, changelog, and dependency documentation when a
    public contract changes.
-10. Open a focused pull request.
+9. Open a focused pull request.
 
 CI validates documentation consistency, Linux glibc, Linux musl, native arm64
 macOS, both static Linux SDK packages, both native macOS SDK packages, and the
