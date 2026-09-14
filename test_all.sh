@@ -196,6 +196,93 @@ run_case() {
   log "  ✓ $name (exit code: $actual_exit)"
 }
 
+run_multifile_case() {
+  local name="$1"
+  local expected_exit="$2"
+  local def_file="test/multifile/${name}_def.weave"
+  local use_file="test/multifile/${name}_use.weave"
+  local expected_wir="test/multifile/${name}.expected.wir"
+  local combined_weave="$BUILD_DIR/test_wir/${name}.combined.weave"
+  local wir_file="$BUILD_DIR/test_wir/${name}.wir"
+  local ll_file="$BUILD_DIR/test_ll/${name}.ll"
+  local bc_file="$BUILD_DIR/test_ll/${name}.bc"
+  local object_file="$BUILD_DIR/test_obj/${name}.o"
+  local bin_file="$BUILD_DIR/test_bin/${name}"
+  local frontend_log="$BUILD_DIR/test_logs/${name}.frontend.log"
+  local backend_log="$BUILD_DIR/test_logs/${name}.backend.log"
+  local cat_helper="$WEAVEC_BOOTSTRAP_DIR/weavec-bootstrap-cat.sh"
+
+  [[ -f "$def_file" && -f "$use_file" ]] || {
+    fail "$name: multifile sources are missing"
+    return
+  }
+  [[ -f "$expected_wir" ]] || {
+    fail "$name: expected WIR fixture is missing"
+    return
+  }
+  [[ -x "$cat_helper" ]] || {
+    fail "$name: multifile driver is missing"
+    return
+  }
+
+  log "Testing: $name (multifile)"
+  rm -f "$wir_file" "$ll_file" "$bc_file" "$object_file" "$bin_file" \
+    "$frontend_log" "$backend_log" "$combined_weave"
+
+  if ! WEAVEC_BOOTSTRAP="$WEAVEC_BOOTSTRAP" \
+      WEAVEC_BOOTSTRAP_CAT_SOURCE="$combined_weave" \
+      "$cat_helper" "$wir_file" "$def_file" "$use_file" \
+      >"$frontend_log" 2>&1; then
+    cat "$frontend_log" >&2
+    fail "$name: multifile surface-to-WIR compilation failed"
+    return
+  fi
+  if [[ ! -s "$wir_file" ]]; then
+    fail "$name: frontend produced empty WIR"
+    return
+  fi
+
+  local def_count
+  def_count="$(grep -c '(fn uniquely_named_tail_decl' "$wir_file" || true)"
+  if [[ "$def_count" != 1 ]]; then
+    fail "$name: uniquely named tail declaration count is $def_count, expected 1"
+    return
+  fi
+
+  if ! cmp -s "$expected_wir" "$wir_file"; then
+    diff -u "$expected_wir" "$wir_file" >&2 || true
+    fail "$name: WIR output differs byte for byte"
+    return
+  fi
+
+  if ! "$WEAVEC1_BIN" "$wir_file" "$ll_file" >"$backend_log" 2>&1; then
+    cat "$backend_log" >&2
+    fail "$name: WIR-to-LLVM compilation failed"
+    return
+  fi
+  if ! llvm-as "$ll_file" -o "$bc_file"; then
+    fail "$name: generated LLVM IR does not assemble"
+    return
+  fi
+  if ! link_test_executable "$ll_file" "$object_file" "$bin_file"; then
+    fail "$name: executable link failed"
+    return
+  fi
+
+  set +e
+  "$bin_file"
+  local actual_exit=$?
+  set -e
+
+  if [[ "$actual_exit" != "$expected_exit" ]]; then
+    fail "$name: expected exit $expected_exit, got $actual_exit"
+    return
+  fi
+
+  PASS_COUNT=$((PASS_COUNT + 1))
+  log "  ✓ $name (exit code: $actual_exit)"
+}
+
 while IFS= read -r line || [[ -n "$line" ]]; do
   line="${line%%#*}"
   line="${line#"${line%%[![:space:]]*}"}"
@@ -213,6 +300,16 @@ while IFS= read -r line || [[ -n "$line" ]]; do
 
   run_case "$name" "$expected_exit"
 done < "$MANIFEST"
+
+log "Testing: extract_program_decls self-test"
+if python3 "$WEAVEC_BOOTSTRAP_DIR/scripts/extract_program_decls.py" --self-test; then
+  PASS_COUNT=$((PASS_COUNT + 1))
+  log "  ✓ extract_program_decls"
+else
+  fail "extract_program_decls self-test failed"
+fi
+
+run_multifile_case "tail_decl" 7
 
 log ""
 log "=========================================="

@@ -166,7 +166,8 @@ Releases publish static Linux x86-64 archives for glibc and musl:
 weavec-bootstrap-vX.Y.Z-linux-x86_64-<libc>/
 ├── bin/
 │   ├── weavec-bootstrap
-│   └── weavec-bootstrap-cat
+│   ├── weavec-bootstrap-cat
+│   └── extract_program_decls.py
 ├── lib/
 │   └── libweave-sexpr.bc
 ├── SDK-MANIFEST

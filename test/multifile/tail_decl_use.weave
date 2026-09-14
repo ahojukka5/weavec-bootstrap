@@ -1,0 +1,13 @@
+; SPDX-License-Identifier: Apache-2.0
+; Later source unit that calls the last declaration of tail_decl_def.weave.
+
+(program
+  (name "tail-decl-use")
+  (version "0.1")
+  (entry main)
+  (fn main
+    (params)
+    (returns i32)
+    (do
+      (return
+        (call_i32 uniquely_named_tail_decl)))))

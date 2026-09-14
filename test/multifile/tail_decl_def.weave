@@ -1,0 +1,13 @@
+; SPDX-License-Identifier: Apache-2.0
+; Ends with a uniquely named function and no trailing sentinel declaration.
+; The next source unit in the multifile case calls this symbol.
+
+(program
+  (name "tail-decl-def")
+  (version "0.1")
+  (fn uniquely_named_tail_decl
+    (params)
+    (returns i32)
+    (do
+      (return
+        (const_i32 7)))))

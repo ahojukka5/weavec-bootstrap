@@ -9,6 +9,7 @@ CHECKOUT="$TMP/bootstrap"
 TOOLS="$TMP/tools"
 mkdir -p "$CHECKOUT/scripts" "$CHECKOUT/build" "$CHECKOUT/test" "$TOOLS"
 cp "$ROOT/scripts/package-macos-sdk.sh" "$CHECKOUT/scripts/"
+printf 'print("")\n' > "$CHECKOUT/scripts/extract_program_decls.py"
 printf '# test\n' > "$CHECKOUT/README.md"
 printf 'license\n' > "$CHECKOUT/LICENSE"
 printf 'notice\n' > "$CHECKOUT/NOTICE"
@@ -56,6 +57,7 @@ archive="$CHECKOUT/dist/weavec-bootstrap-v0.3.1-macos-arm64.tar.gz"
 for path in \
   bin/weavec-bootstrap \
   bin/weavec-bootstrap-cat \
+  bin/extract_program_decls.py \
   lib/libweave-sexpr.bc \
   SDK-MANIFEST; do
   tar -tzf "$archive" | grep -Fq \

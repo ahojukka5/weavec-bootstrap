@@ -25,7 +25,8 @@ Before changing `VERSION`, confirm:
 
 1. `python3 scripts/audit_bootstrap.py` passes with every source function
    reachable and every extern used;
-2. all 58 manifest cases pass on Linux glibc, Linux musl, and native macOS;
+2. all 58 manifest cases plus the multifile tail-declaration regression pass
+   on Linux glibc, Linux musl, and native macOS;
 3. the complete current downstream `weavec` ladder passes using this source
    tree;
 4. all four release packaging jobs pass their installed-layout smoke tests;
@@ -41,7 +42,8 @@ and checksums are published.
 weavec-bootstrap-vX.Y.Z-linux-x86_64-<libc>/
 ├── bin/
 │   ├── weavec-bootstrap
-│   └── weavec-bootstrap-cat
+│   ├── weavec-bootstrap-cat
+│   └── extract_program_decls.py
 ├── lib/
 │   └── libweave-sexpr.bc
 ├── SDK-MANIFEST
