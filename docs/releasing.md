@@ -125,9 +125,8 @@ dispatches. On a successful `master` push it publishes the release selected by
 After publication:
 
 1. verify that the tag resolves to the merged release commit;
-2. verify both archives and `SHA256SUMS` are present;
-3. update the default `WEAVEC_BOOTSTRAP_VERSION` and source fallback ref in
-   `weavec`;
+2. verify all four archives and `SHA256SUMS` are present;
+3. update the default `WEAVEC_BOOTSTRAP_VERSION` in `weavec`;
 4. run the complete `weavec` matrix against the published SDKs;
 5. do not add further features to the released bootstrap line—only bootstrap
    correctness, security, portability, reproducibility, or packaging fixes.
