@@ -154,9 +154,9 @@ weavec-bootstrap-vX.Y.Z-linux-x86_64-<libc>/
 ```
 
 macOS archives use the same files without a libc suffix. See
-[`docs/macos-sdk.md`](docs/macos-sdk.md). The installed multifile driver requires
-Python 3. Release assets include `SHA256SUMS`; downstream builds must pin a
-version and verify the selected archive before extraction. See
+[`docs/macos-sdk.md`](docs/macos-sdk.md). The installed multifile driver
+requires Python 3. Release assets include `SHA256SUMS`; downstream builds must
+pin a version and verify the selected archive before extraction. See
 [`docs/releasing.md`](docs/releasing.md).
 
 ## CI coverage
