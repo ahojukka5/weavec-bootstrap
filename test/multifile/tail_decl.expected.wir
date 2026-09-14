@@ -1,0 +1,1 @@
+(core-module (core-version 2) (decls (fn uniquely_named_tail_decl (params) (returns i32) (do (return (const_i32 7)))) (fn main (params) (returns i32) (do (return (call_i32 uniquely_named_tail_decl))))))

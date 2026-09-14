@@ -25,6 +25,7 @@ packaging script enforces the closest practical equivalent instead:
 weavec-bootstrap-vX.Y.Z-macos-<arm64|x86_64>/
 ├── bin/weavec-bootstrap
 ├── bin/weavec-bootstrap-cat
+├── bin/extract_program_decls.py
 ├── lib/libweave-sexpr.bc
 ├── SDK-MANIFEST
 ├── VERSION

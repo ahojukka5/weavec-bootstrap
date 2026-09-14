@@ -7,6 +7,14 @@ named `weavefront` through release `v0.1.0`. The format follows
 
 ## [Unreleased]
 
+### Fixed
+
+- Multifile lowering keeps the final top-level declaration of each source unit.
+  The combiner now extracts complete top-level forms, skips only program
+  `name`/`version` metadata, and fails when a unit cannot be extracted. A
+  two-file regression asserts that a uniquely named tail function is defined
+  once in WIR and links through the bootstrap chain.
+
 ### Added
 
 - A documentation index and automated checks for lowercase documentation names

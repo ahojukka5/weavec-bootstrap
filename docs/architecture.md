@@ -135,7 +135,9 @@ The executable owns its 16 MiB main-thread stack requirement.
 
 `weavec-bootstrap-cat.sh` removes outer `(program ...)` wrappers, concatenates
 module declarations in caller-supplied order, and invokes the frontend once.
-The first `weavec` build uses this deterministic path.
+The first `weavec` build uses this deterministic path. The combiner keeps every
+top-level declaration from every source unit, including the final declaration
+before end-of-file.
 
 ## Verification model
 
