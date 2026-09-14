@@ -23,9 +23,16 @@ named `weavefront` through release `v0.1.0`. The format follows
 
 - A documentation index and automated checks for lowercase documentation names
   and valid local Markdown links.
-- Native macOS SDK packaging for the compiler, multifile driver, and parser
-  library, verified with a `libSystem`-only self-containment check and
-  published automatically by the release workflow alongside the Linux SDKs.
+- Native macOS SDK packaging for the compiler and multifile driver, verified
+  with a `libSystem`-only self-containment check and published automatically by
+  the release workflow alongside the Linux SDKs.
+
+### Removed
+
+- `PARSER_SDK_EXPORTS`, `libweave-sexpr.bc`, and unused `tree_free`. Parser
+  modules remain linked into the `weavec-bootstrap` executable. Current
+  `weavec` consumes this repository through the command and multifile driver
+  only.
 
 ### Changed
 

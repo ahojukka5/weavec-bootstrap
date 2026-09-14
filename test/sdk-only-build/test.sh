@@ -68,7 +68,7 @@ chmod +x "$TOOLS"/*
 )
 
 [[ -x "$CHECKOUT/build/weavec-bootstrap" ]]
-[[ -s "$CHECKOUT/build/libweave-sexpr.bc" ]]
+[[ ! -e "$CHECKOUT/build/libweave-sexpr.bc" ]]
 [[ "$(grep -c '^weavec1 ' "$LOG")" -eq 10 ]]
 grep -Fq 'WEAVE_RUNTIME_MODE=sdk' "$CHECKOUT/build/toolchain.env"
 grep -Fq "WEAVEC1_SDK=$SDK" "$CHECKOUT/build/toolchain.env"

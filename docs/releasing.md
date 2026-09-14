@@ -2,8 +2,7 @@
 
 `weavec-bootstrap` publishes static Linux x86-64 SDK archives for glibc and
 musl, and native macOS SDK archives for arm64 and x86-64. A release packages
-the bootstrap executable, multifile driver, and the single parser-library
-boundary consumed by `weavec`.
+the bootstrap executable, multifile driver, and declaration extractor.
 
 ## Version and immutability
 
@@ -44,8 +43,6 @@ weavec-bootstrap-vX.Y.Z-linux-x86_64-<libc>/
 │   ├── weavec-bootstrap
 │   ├── weavec-bootstrap-cat
 │   └── extract_program_decls.py
-├── lib/
-│   └── libweave-sexpr.bc
 ├── SDK-MANIFEST
 ├── VERSION
 ├── README.md
@@ -53,8 +50,7 @@ weavec-bootstrap-vX.Y.Z-linux-x86_64-<libc>/
 └── NOTICE
 ```
 
-The executable is statically linked for the selected libc. The parser library is
-LLVM bitcode and is linked by downstream bootstrap consumers as one unit.
+The executable is statically linked for the selected libc.
 `weavec-bootstrap-cat` requires Python 3 at runtime.
 
 The executable includes the local fixed-signature host shim from
