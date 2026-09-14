@@ -27,8 +27,8 @@ Before changing `VERSION`, confirm:
    reachable and every extern used;
 2. all 58 manifest cases plus the multifile tail-declaration regression pass
    on Linux glibc, Linux musl, and native macOS;
-3. the complete current downstream `weavec` ladder passes using this source
-   tree;
+3. the complete current downstream `weavec` ladder passes with a Linux glibc
+   SDK packaged from this source tree;
 4. all four release packaging jobs pass their installed-layout smoke tests;
 5. `CHANGELOG.md`, README, architecture, and dependency pins are current;
 6. the selected `weavec1` release and `SHA256SUMS` already exist.

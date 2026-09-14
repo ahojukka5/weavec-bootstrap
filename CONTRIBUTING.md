@@ -71,7 +71,8 @@ repository.
 
 CI validates documentation consistency, Linux glibc, Linux musl, native arm64
 macOS, both static Linux SDK packages, both native macOS SDK packages, and the
-complete current `weavec` downstream ladder.
+complete current `weavec` downstream ladder using an SDK packaged from this
+tree.
 
 ## Dependency changes
 
