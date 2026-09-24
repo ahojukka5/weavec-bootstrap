@@ -189,7 +189,6 @@ contracts are:
 - [`docs/macos-sdk.md`](docs/macos-sdk.md)
 - [`docs/releasing.md`](docs/releasing.md)
 - [`CONTRIBUTING.md`](CONTRIBUTING.md)
-- [`CHANGELOG.md`](CHANGELOG.md)
 
 Files under `docs/` use lowercase kebab-case names. Conventional root metadata
 keeps its standard uppercase spelling.

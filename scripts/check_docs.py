@@ -15,7 +15,7 @@ DOCS = ROOT / "docs"
 DOC_NAME = re.compile(r"[a-z0-9]+(?:-[a-z0-9]+)*\.md\Z")
 LINK = re.compile(r"\[[^\]]*\]\(([^)]+)\)")
 REQUIRED = {"index.md", "architecture.md", "macos-sdk.md", "releasing.md"}
-ROOT_DOCS = {"README.md", "CONTRIBUTING.md", "CHANGELOG.md"}
+ROOT_DOCS = {"README.md", "CONTRIBUTING.md"}
 
 
 def markdown_files() -> list[Path]:
