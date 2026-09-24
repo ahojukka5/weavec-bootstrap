@@ -61,8 +61,8 @@ repository.
    ```
 
 7. Review WIR goldens, executable exit codes, and reachability changes.
-8. Update README, architecture, changelog, and dependency documentation when a
-   public contract changes.
+8. Update README, architecture, and dependency documentation when a public
+   contract changes.
 9. Open a focused pull request.
 
 CI validates documentation consistency, Linux glibc, Linux musl, native arm64

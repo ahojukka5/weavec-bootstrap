@@ -15,10 +15,9 @@ bootstrap boundary.
 - [Releasing](releasing.md) — SDK layout, validation, publication, and dependency
   ordering.
 - [Contributing](../CONTRIBUTING.md) — change policy and required checks.
-- [Changelog](../CHANGELOG.md) — released and pending changes.
 
 ## Naming policy
 
 Files under `docs/` use lowercase kebab-case names. Conventional repository-root
-files such as `README.md`, `CHANGELOG.md`, `CONTRIBUTING.md`, `LICENSE`, and
-`NOTICE` retain their standard names.
+files such as `README.md`, `CONTRIBUTING.md`, `LICENSE`, and `NOTICE` retain
+their standard names.

@@ -29,8 +29,11 @@ Before changing `VERSION`, confirm:
 3. the complete current downstream `weavec` ladder passes with a Linux glibc
    SDK packaged from this source tree;
 4. all four release packaging jobs pass their installed-layout smoke tests;
-5. `CHANGELOG.md`, README, architecture, and dependency pins are current;
+5. README, architecture, and dependency pins are current;
 6. the selected `weavec1` release and `SHA256SUMS` already exist.
+
+The repository keeps no changelog. Write the release notes from `git log`
+since the previous tag when the release is published.
 
 Do not update the default `weavec` SDK pin until the new bootstrap release assets
 and checksums are published.
